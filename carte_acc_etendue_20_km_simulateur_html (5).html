@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACC étendue – Carte & vérification (Echome Energies)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    :root{--ink:#1c1c1c;--muted:#f6f7f7;--line:#e6eaea;--turq:#37C3AF;--ok:#0f766e;--warn:#b91c1c}
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
+    header{padding:12px 16px;border-bottom:1px solid var(--line);background:#fff}
+    header h1{font-size:18px;margin:0 0 4px 0}
+    header .sub{font-size:13px;color:#4b5563}
+    .wrap{display:grid;grid-template-columns:360px 1fr;height:calc(100% - 58px)}
+    aside{position:relative;border-right:1px solid var(--line);background:var(--muted);padding:12px;overflow:auto}
+    aside h2{font-size:14px;margin:10px 0 8px;color:#0f172a}
+    aside label{font-size:13px}
+    .row{margin:8px 0}
+    .row input,.row select,.row textarea,.row button{width:100%;box-sizing:border-box}
+    .row input,.row select,.row textarea{padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px}
+    .row textarea{min-height:88px}
+    .btn{padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:600}
+    .btn:hover{border-color:#cfd8d8}
+    .btn.primary{background:var(--turq);border-color:var(--turq);color:#fff}
+    .note{font-size:12px;color:#475569;background:#f0fbf9;border:1px solid #d5efea;border-left:4px solid var(--turq);padding:8px 10px;border-radius:8px}
+    #map{height:100%}
+    .mapwrap{height:100%; min-height:420px}
+    .sticky{position:sticky;top:8px;z-index:10}
+    .status{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;margin-top:6px;font-size:13px}
+    .status.pass{border-color:#c7eadf;background:#f3fbf8}
+    .status.fail{border-color:#f6d2cc;background:#fff5f3}
+    .legend{display:flex;gap:8px;align-items:center;font-size:12px}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot.p{background:#e74c3c}.dot.c{background:#2e86de}.dot.s{background:#f1c40f}
+    .small{font-size:12px;color:#64748b}
+    .hr{height:1px;background:var(--line);margin:10px 0}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;border:1px solid #dfe5fd;color:#1e3a8a;font-size:12px}
+    /* mobile */
+    .headrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .toggle{display:none;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:600}
+    .toggle:hover{border-color:#cfd8d8}
+    @media (max-width: 900px){
+      .wrap{grid-template-columns:1fr;height:auto}
+      .mapwrap{height:calc(100vh - 58px)}
+      .toggle{display:inline-flex}
+      aside{position:fixed;left:0;top:58px;bottom:0;width:min(92vw,360px);max-width:92vw;background:var(--muted);transform:translateX(-110%);transition:transform .25s ease;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+      .wrap.show-aside aside{transform:translateX(0)}
+      .wrap.show-aside::after{content:'';position:fixed;inset:58px 0 0 0;background:rgba(0,0,0,.28);z-index:900}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="headrow">
+      <h1>ACC étendue – Carte & vérification du périmètre (jusqu’à 20 km)</h1>
+      <button id="toggleAside" class="toggle">☰ Panneau</button>
+    </div>
+    <div class="sub">Echome Energies · Contrôles : <span class="pill">Distance max (règle) </span> ou <span class="pill">Cercle unique</span></div>
+  </header>
+
+  <div class="wrap">
+    <aside>
+      <!-- Statut règle officielle (distance max) -->
+      <div class="row status sticky" id="statusRule">Aucun point saisi.</div>
+
+      <div class="hr"></div>
+
+      <h2>1) Participants</h2>
+      <div class="row">
+        <label>Ajout rapide (clic sur la carte) — choisir le <strong>type</strong> :</label>
+        <select id="clickType">
+          <option value="consumer">Consommateur</option>
+          <option value="producer">Producteur</option>
+          <option value="sdis">SDIS</option>
+        </select>
+      </div>
+      <div class="row"><button id="clearBtn" class="btn">Effacer tous les points</button></div>
+
+      <div class="hr"></div>
+
+      <h2>2) Saisie par adresse (géocodage)</h2>
+      <div class="row"><label>Nom</label><input id="addrName" placeholder="ex. Collège B" /></div>
+      <div class="row"><label>Adresse</label><input id="addrText" placeholder="ex. 12 rue de la Paix, 75002 Paris" /></div>
+      <div class="row"><label>Type</label>
+        <select id="addrType"><option value="consumer">Consommateur</option><option value="producer">Producteur</option><option value="sdis">SDIS</option></select>
+      </div>
+      <div class="row small"><label>Service (OSM Nominatim par défaut)</label><input id="geocodeEndpoint" placeholder="https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" /></div>
+      <div class="row"><button id="geocodeBtn" class="btn">Géocoder & ajouter</button></div>
+
+      <div class="hr"></div>
+
+      <h2>2bis) Géocodage par lots</h2>
+      <div class="row"><label>Liste (Nom;Adresse;Type)</label>
+        <textarea id="batchList" placeholder="Collège B;12 rue de la Paix, Paris;consumer
+SDIS 34;Béziers;sdis
+Usine A;47310 Estillac;producer"></textarea>
+      </div>
+      <div class="row"><button id="batchGeocodeBtn" class="btn">Géocoder la liste</button></div>
+      <div class="row small" id="batchStatus"></div>
+
+      <div class="hr"></div>
+
+      <h2>3) Import (lat/lon)</h2>
+      <div class="row"><label>Coller (Nom;Lat;Lon;Type) — ex. Usine A;45.76;4.84;consumer</label><textarea id="bulk"></textarea></div>
+      <div class="row"><button id="importBtn" class="btn">Importer la liste</button></div>
+
+      <div class="hr"></div>
+
+      <h2>4) Périmètre cible</h2>
+      <div class="row">
+        <label><input type="radio" name="limit" value="2"> 2 km (droit commun)</label><br/>
+        <label><input type="radio" name="limit" value="10"> 10 km (dérogation périurbaine)</label><br/>
+        <label><input type="radio" name="limit" value="20" checked> 20 km (dérogation rurale)</label><br/>
+        <label class="small"><input type="radio" name="limit" value="custom"> Perso : <input id="customKm" type="number" min="0" step="0.1" style="width:90px"> km</label>
+      </div>
+
+      <div class="hr"></div>
+
+      <h2>5) Mode « Cercle unique » (pédago)</h2>
+      <div class="row small">Placez un <strong>centre</strong> n’importe où (clic) puis voyez qui est <strong>dans le cercle</strong> (rayon = limite choisie).<br/>Option : <em>exiger qu’au moins un producteur soit dans le cercle</em>.</div>
+      <div class="row"><button id="setCenterBtn" class="btn">Définir / déplacer le centre sur la carte</button></div>
+      <div class="row"><label><input type="checkbox" id="requireProd" checked> Exiger qu’au moins un <strong>producteur</strong> soit dans le cercle</label></div>
+      <div class="row status" id="statusCircle">Centre non défini.</div>
+
+      <div class="hr"></div>
+
+      <h2>6) Vérification « même GRD »</h2>
+      <div class="row"><label>Charger un GeoJSON de périmètres GRD</label><input type="file" id="grdFile" accept=".geojson,.json" /></div>
+      <div class="row"><label>Attribut opérateur (ex. <em>grd</em> / <em>operator</em> / <em>distributor</em>)</label><input id="grdProp" placeholder="grd" /></div>
+      <div class="row"><button id="checkGrdBtn" class="btn">Analyser l’appartenance GRD</button></div>
+      <div class="row status" id="grdStatus">Aucun calque GRD chargé.</div>
+
+      <div class="hr"></div>
+
+      <h2>7) Export</h2>
+      <div class="row"><button id="exportGeojsonBtn" class="btn">Exporter GeoJSON</button></div>
+      <div class="row"><button id="exportCsvBtn" class="btn">Exporter CSV</button></div>
+      <div class="row"><button id="exportPdfBtn" class="btn primary">Exporter PDF (carte + tableau)</button></div>
+
+      <div class="hr"></div>
+
+      <h2>Légende</h2>
+      <div class="legend"><span class="dot p"></span> Producteur · <span class="dot c"></span> Consommateur · <span class="dot s"></span> SDIS</div>
+
+      <div class="hr"></div>
+      <div class="note"><strong>Mémo réglementaire</strong><br/>• Contrôle officiel : <em>distance maximale entre les deux participants les plus éloignés</em> ≤ 2/10/20 km.<br/>• Le mode « Cercle unique » est un <em>outil pédagogique</em> pour sélectionner des membres autour d’un centre ; le producteur n’a <em>pas besoin d’être au centre</em>, mais <em>dans le cercle</em> si vous cochez l’option.</div>
+
+      <div class="hr"></div>
+      <div id="selfcheck" class="small">Self-checks : en attente…</div>
+    </aside>
+
+    <div class="mapwrap" style="position:relative"><div id="map"></div></div>
+  </div>
+
+<script>
+// ——— Utils
+function haversineKm(a, b){
+  const R = 6371; const toRad = d => d*Math.PI/180;
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+
+// Helper: safe split lines
+function splitLines(text){ return (text||'').split(/\r?\n/); }
+
+// ——— Map
+const map = L.map('map').setView([46.6, 2.0], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
+
+// Échelle métrique
+L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
+
+const participants = []; // {id,name,type,lat,lng,marker,grd,inCircle}
+const colors = { producer:'#e74c3c', consumer:'#2e86de', sdis:'#f1c40f' };
+let uid = 0;
+
+function getLimitKm(){
+  const sel = document.querySelector('input[name="limit"]:checked').value;
+  if(sel === 'custom'){
+    const v = parseFloat(document.getElementById('customKm').value||'0');
+    return isNaN(v)||v<=0 ? 20 : v;
+  }
+  return parseFloat(sel);
+}
+
+function styleMarker(p){
+  const color = colors[p.type] || '#555';
+  const stroke = p.inCircle ? '#16a34a' : '#333';
+  const weight = p.inCircle ? 3 : 1;
+  p.marker.setStyle({radius:6, color:stroke, weight, fillColor:color, fillOpacity:0.9});
+}
+
+function addParticipant(lat, lng, name, type){
+  const p = {id:++uid, name:(name||'Sans nom'), type:(type||'consumer'), lat, lng, grd:null, inCircle:false};
+  p.marker = L.circleMarker([lat, lng], {radius:6, color:'#333', weight:1, fillColor:(colors[p.type]||'#555'), fillOpacity:0.9}).addTo(map);
+  p.marker.bindTooltip(`${p.name} (${p.type})`, {permanent:false});
+  p.marker.on('contextmenu', ()=> removeParticipant(p.id));
+  participants.push(p);
+  refreshAll();
+}
+
+function removeParticipant(id){
+  const idx = participants.findIndex(x=> x.id===id);
+  if(idx>-1){ map.removeLayer(participants[idx].marker); participants.splice(idx,1); }
+  refreshAll();
+}
+
+function refreshRuleStatus(){
+  const box = document.getElementById('statusRule');
+  if(participants.length<2){ box.className='status'; box.textContent='Ajoutez au moins deux participants.'; return; }
+  let maxKm=0, pair=null;
+  for(let i=0;i<participants.length;i++){
+    for(let j=i+1;j<participants.length;j++){
+      const a=participants[i], b=participants[j];
+      const d=haversineKm({lat:a.lat,lng:a.lng},{lat:b.lat,lng:b.lng});
+      if(d>maxKm){ maxKm=d; pair=[a,b]; }
+    }
+  }
+  const limit=getLimitKm(); const pass=maxKm<=limit+1e-6;
+  box.className='status '+(pass?'pass':'fail');
+  const names = pair ? `${pair[0].name} ↔ ${pair[1].name}` : '';
+  box.innerHTML = `<strong>Distance max</strong> : ${maxKm.toFixed(2)} km (limite : ${limit} km) · ${pass?'<span style="color:var(--ok)">OK</span>':'<span style="color:var(--warn)">Hors périmètre</span>'}<br/><span class="small">Paire la plus éloignée : ${names}</span>`;
+}
+
+// ——— Mode Cercle unique
+let centerMarker=null, eligCircle=null, placingCenter=false;
+
+function setCircleCenter(latlng){
+  const r = getLimitKm()*1000;
+  if(!centerMarker){
+    centerMarker = L.marker(latlng, {draggable:true}).addTo(map);
+    centerMarker.on('drag', ()=> updateCircle());
+  } else { centerMarker.setLatLng(latlng); }
+  if(!eligCircle){ eligCircle = L.circle(latlng, {radius:r, color:'#0ea5a6', weight:2.5, fill:false, opacity:0.9}).addTo(map); }
+  updateCircle();
+}
+
+function updateCircle(){
+  if(!centerMarker||!eligCircle) return;
+  const r = getLimitKm()*1000;
+  eligCircle.setLatLng(centerMarker.getLatLng());
+  eligCircle.setRadius(r);
+  // compute who is inside
+  const c = centerMarker.getLatLng();
+  let inside = [], hasProducer=false;
+  participants.forEach(p=>{
+    const d = haversineKm({lat:p.lat,lng:p.lng},{lat:c.lat,lng:c.lng});
+    p.inCircle = d <= (r/1000) + 1e-6;
+    if(p.inCircle){ inside.push(p); if(p.type==='producer') hasProducer=true; }
+    styleMarker(p);
+  });
+  const requireProd = document.getElementById('requireProd').checked;
+  const ok = requireProd ? hasProducer : true;
+  const box = document.getElementById('statusCircle');
+  box.className = 'status ' + (ok ? 'pass' : 'fail');
+  const list = inside.map(p=> `${p.name} <span class="small">(${p.type})</span>`).join(' · ');
+  box.innerHTML = `<strong>Cercle unique</strong> — ${inside.length} point(s) dans le cercle (R=${(r/1000).toFixed(1)} km) ${requireProd?`· ${hasProducer?'<span style=\"color:var(--ok)\">producteur présent</span>':'<span style=\"color:var(--warn)\">aucun producteur</span>'}`:''}<br/><span class="small">${list||'aucun'}</span>`;
+}
+
+// Map clicks
+map.on('click', (e)=>{
+  if(placingCenter){ setCircleCenter(e.latlng); placingCenter=false; document.getElementById('setCenterBtn').textContent='Définir / déplacer le centre sur la carte'; return; }
+  const type = document.getElementById('clickType').value;
+  const name = prompt('Nom du participant ?'); if(!name) return;
+  addParticipant(e.latlng.lat, e.latlng.lng, name.trim(), type);
+});
+
+document.getElementById('setCenterBtn').onclick = ()=>{
+  placingCenter = !placingCenter;
+  document.getElementById('setCenterBtn').textContent = placingCenter ? 'Cliquez sur la carte pour placer le centre…' : 'Définir / déplacer le centre sur la carte';
+};
+
+document.getElementById('requireProd').onchange = updateCircle;
+
+function refreshAll(){ refreshRuleStatus(); updateCircle(); }
+
+// ——— UI: clear / limit / imports
+ document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
+
+ document.getElementsByName('limit').forEach(r=> r.addEventListener('change', ()=>{ refreshAll(); }));
+ document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked){ refreshAll(); }});
+
+ document.getElementById('importBtn').onclick = ()=>{
+   const txt = (document.getElementById('bulk').value||'').trim(); if(!txt) return;
+   const lines = splitLines(txt);
+   lines.forEach(line=>{
+     const parts = line.split(/[;,]|\t/).map(s=>s.trim());
+     if(parts.length<4) return; const [name, lat, lon, type] = parts;
+     const la = parseFloat(lat), lo = parseFloat(lon); if(isNaN(la)||isNaN(lo)) return;
+     addParticipant(la, lo, name, (''+type).toLowerCase());
+   });
+ };
+
+ // Geocoding single
+ async function geocodeAddress(){
+  const addr = (document.getElementById('addrText').value||'').trim();
+  const name = (document.getElementById('addrName').value||addr).trim();
+  const type = document.getElementById('addrType').value;
+  if(!addr){ alert('Renseignez une adresse.'); return; }
+  let endpoint = (document.getElementById('geocodeEndpoint').value||'').trim();
+  if(!endpoint) endpoint = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=';
+  try{
+    const url = endpoint + encodeURIComponent(addr);
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    if(!res.ok) throw new Error('Géocodage indisponible');
+    const js = await res.json(); if(!js||!js.length){ alert('Adresse introuvable.'); return; }
+    const {lat, lon, display_name} = js[0];
+    addParticipant(parseFloat(lat), parseFloat(lon), name||display_name, type);
+    map.setView([parseFloat(lat), parseFloat(lon)], 14);
+  }catch(e){ alert('Erreur de géocodage : '+e.message); }
+ }
+ document.getElementById('geocodeBtn').onclick = geocodeAddress;
+
+ // Batch geocode
+ async function geocodeBatch(){
+  const list = splitLines((document.getElementById('batchList').value||'').trim()).filter(Boolean);
+  if(!list.length){ alert('Collez des lignes (Nom;Adresse;Type).'); return; }
+  const endpoint = (document.getElementById('geocodeEndpoint').value||'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=');
+  const status = document.getElementById('batchStatus'); let ok=0, ko=0;
+  for(let i=0;i<list.length;i++){
+    status.textContent = `Géocodage ${i+1}/${list.length}…`;
+    const parts = list[i].split(/[;,]|\t/).map(s=>s.trim());
+    if(parts.length<2){ ko++; continue; }
+    const [name, address, type='consumer'] = parts;
+    try{
+      const url = endpoint + encodeURIComponent(address);
+      const res = await fetch(url, {headers:{'Accept':'application/json'}});
+      const js = await res.json();
+      if(js && js[0]){ addParticipant(parseFloat(js[0].lat), parseFloat(js[0].lon), name||js[0].display_name, (''+type).toLowerCase()); ok++; }
+      else { ko++; }
+    }catch(e){ ko++; }
+    await new Promise(r=> setTimeout(r, 1100)); // respect Nominatim
+  }
+  status.textContent = `Terminé : ${ok} ajouté(s), ${ko} échec(s).`;
+ }
+ document.getElementById('batchGeocodeBtn').onclick = geocodeBatch;
+
+ // ——— GRD overlay
+ let grdLayer=null, grdFeatures=null;
+ function loadGrdGeoJSON(text){
+  try{
+    const js = JSON.parse(text);
+    if(grdLayer){ map.removeLayer(grdLayer); grdLayer=null; }
+    grdLayer = L.geoJSON(js, {style:{color:'#7c3aed', weight:1, fillOpacity:0.05}}).addTo(map);
+    grdFeatures = (js.type==='FeatureCollection') ? js.features : [js];
+    const b = document.getElementById('grdStatus'); b.className='status';
+    b.textContent = 'Calque GRD chargé ('+grdFeatures.length+' polygone(s)). Cliquez « Analyser ».';
+  }catch(e){ alert('GeoJSON invalide : '+e.message); }
+ }
+ document.getElementById('grdFile').addEventListener('change', function(){
+  const f=this.files && this.files[0]; if(!f) return; const rdr=new FileReader(); rdr.onload=e=>loadGrdGeoJSON(e.target.result); rdr.readAsText(f);
+ });
+ function analyzeGrd(){
+  if(!grdFeatures){ alert('Chargez un GeoJSON de périmètres GRD.'); return; }
+  const prop = (document.getElementById('grdProp').value||'grd').trim();
+  const counts = new Map(); let missing=0;
+  participants.forEach(p=>{
+    p.grd=null; const pt=turf.point([p.lng,p.lat]);
+    for(const feat of grdFeatures){ if(!feat||!feat.geometry) continue; try{ if(turf.booleanPointInPolygon(pt, feat)){
+      const pr=feat.properties||{}; const v = pr[prop] ?? pr.operator ?? pr.distributor ?? null; p.grd = v!=null? String(v):null; break; } }catch(e){}
+    }
+    const key=p.grd||'(inconnu)'; counts.set(key,(counts.get(key)||0)+1); if(!p.grd) missing++;
+  });
+  const uniques = Array.from(new Set(participants.map(p=> p.grd || null)));
+  const same = uniques.filter(v=> v!==null).length===1 && missing===0;
+  const box=document.getElementById('grdStatus'); box.className='status '+(same?'pass':'fail');
+  const list=Array.from(counts.entries()).map(([k,v])=> `${k}: ${v}`).join(' · ');
+  box.innerHTML = '<strong>Vérification "même GRD"</strong> — '+(same?'<span style="color:var(--ok)">OK (tous identiques)</span>':'<span style="color:var(--warn)">Non homogène ou inconnus</span>')+'<br/><span class="small">Répartition : '+list+'</span>';
+ }
+ document.getElementById('checkGrdBtn').onclick = analyzeGrd;
+
+ // ——— Export helpers
+ function buildCSVString(){
+  const header=['name','lat','lon','type','grd'];
+  const rows=participants.map(p=>[p.name,p.lat,p.lng,p.type,p.grd||'']);
+  const csv=[header.join(','),...rows.map(r=> r.map(x=>(''+x).includes(',') ? '"'+((''+x).replace(/"/g,'""'))+'"' : x).join(','))].join('\n');
+  return csv;
+ }
+
+ // ——— Export GeoJSON / CSV / PDF
+ function exportGeoJSON(){
+  const fc={type:'FeatureCollection',features:participants.map(p=>({type:'Feature',geometry:{type:'Point',coordinates:[p.lng,p.lat]},properties:{name:p.name,type:p.type,grd:p.grd||null}}))};
+  const blob=new Blob([JSON.stringify(fc,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='participants_acc.geojson'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+ }
+ document.getElementById('exportGeojsonBtn').onclick = exportGeoJSON;
+
+ function exportCSV(){
+  const csv = buildCSVString();
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='participants_acc.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+ }
+ document.getElementById('exportCsvBtn').onclick = exportCSV;
+
+ async function exportPDF(){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'}); const pad=28;
+  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('ACC étendue — Rapport', pad, pad+4);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  // Règle officielle
+  let maxKm=0, pair=null; for(let i=0;i<participants.length;i++){ for(let j=i+1;j<participants.length;j++){ const d=haversineKm(participants[i],participants[j]); if(d>maxKm){maxKm=d; pair=[participants[i],participants[j]];} } }
+  const limit=getLimitKm(); const summary=`Distance max: ${maxKm.toFixed(2)} km (limite: ${limit} km) — Paire: ${pair?pair[0].name+' ↔ '+pair[1].name:'n/a'}`; doc.text(summary, pad, pad+22);
+  // Carte
+  const mapEl=document.getElementById('map'); const canvas=await html2canvas(mapEl,{useCORS:true,logging:false,scale:2}); const imgData=canvas.toDataURL('image/png'); const pageW=doc.internal.pageSize.getWidth(); const pageH=doc.internal.pageSize.getHeight(); const imgW=pageW-pad*2; const ratio=canvas.height/canvas.width; const imgH=imgW*ratio; doc.addImage(imgData,'PNG',pad,pad+40,imgW,Math.min(imgH,pageH-220));
+  // Tableau
+  const rows=participants.map(p=>[p.name,p.type,p.lat.toFixed(6),p.lng.toFixed(6),p.grd||'']);
+  doc.autoTable({ startY: pageH-160, head: [['Nom','Type','Lat','Lon','GRD']], body: rows, styles:{fontSize:8}, headStyles:{fillColor:[55,195,175]} });
+  doc.save('rapport_acc.pdf');
+ }
+ document.getElementById('exportPdfBtn').onclick = exportPDF;
+
+ // ——— Init demo points
+ addParticipant(48.8566, 2.3522, 'Consommateur Paris', 'consumer');
+ addParticipant(47.2184, -1.5536, 'Producteur Nantes', 'producer');
+ addParticipant(47.9025, 1.9090, 'SDIS 45', 'sdis');
+ map.fitBounds(L.featureGroup(participants.map(p=>p.marker)).getBounds().pad(0.3));
+ refreshAll();
+
+// ——— Mobile: toggle du panneau
+const wrapEl = document.querySelector('.wrap');
+const tgl = document.getElementById('toggleAside');
+if(tgl){ tgl.onclick = ()=> wrapEl.classList.toggle('show-aside'); }
+const mapwrap = document.querySelector('.mapwrap');
+if(mapwrap){ mapwrap.addEventListener('click', ()=> wrapEl.classList.remove('show-aside')); }
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') wrapEl.classList.remove('show-aside'); });
+
+// ——— Self-checks (tests rapides)
+(function runSelfTests(){
+  const out = document.getElementById('selfcheck');
+  try{
+    // Test 1: splitLines handles CRLF and LF
+    const t1 = splitLines('A\nB\r\nC');
+    if(!(t1.length===3 && t1[0]==='A' && t1[1]==='B' && t1[2]==='C')) throw new Error('splitLines');
+    // Test 2: CSV builder contains header + newline
+    const csv = buildCSVString();
+    if(!csv.includes('\n')) throw new Error('CSV newline');
+    // Test 3: parts split regex
+    const parts = 'N;45;2;consumer'.split(/[;,]|\t/);
+    if(parts.length!==4) throw new Error('parts split');
+    out.textContent = 'Self-checks : OK';
+  }catch(e){ out.textContent = 'Self-checks : erreur → ' + e.message; console.error(e); }
+})();
+</script>
+</body>
+</html>
