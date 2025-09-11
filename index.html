@@ -2,545 +2,630 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
+  <title>ACC étendue – Étude PMO (IGN, INSEE, centre libre, emprise producteur)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACC étendue – Étude PMO (centre libre, emprise, distance max) · Echome Energies</title>
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <!-- Turf (géométries) -->
+  <!-- Turf.js pour buffers et géométrie -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-  <!-- Export image carte -->
+  <!-- Leaflet EasyPrint (export image rapide) -->
   <script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.min.js"></script>
-  <!-- PDF -->
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.min.js"></script>
   <style>
-    :root{--ink:#1c1c1c;--muted:#f6f7f7;--line:#e6eaea;--turq:#37C3AF;--ok:#0f766e;--warn:#b91c1c}
-    html,body{height:100%}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
-    header{padding:12px 16px;border-bottom:1px solid var(--line);background:#fff}
-    .headrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
-    header h1{font-size:18px;margin:0 0 4px 0}
-    header .sub{font-size:13px;color:#4b5563}
-    .toggle{display:none;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:600}
-    .toggle:hover{border-color:#cfd8d8}
-    .wrap{display:grid;grid-template-columns:380px 1fr;height:calc(100% - 58px)}
-    aside{position:relative;border-right:1px solid var(--line);background:var(--muted);padding:12px;overflow:auto}
-    aside h2{font-size:14px;margin:10px 0 8px;color:#0f172a}
-    aside label{font-size:13px}
-    .row{margin:8px 0}
-    .row input,.row select,.row textarea,.row button{width:100%;box-sizing:border-box}
-    .row input,.row select,.row textarea{padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px}
-    .row textarea{min-height:88px}
-    .btn{padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:600}
-    .btn:hover{border-color:#cfd8d8}
-    .btn.primary{background:var(--turq);border-color:var(--turq);color:#fff}
-    .note{font-size:12px;color:#475569;background:#f0fbf9;border:1px solid #d5efea;border-left:4px solid var(--turq);padding:8px 10px;border-radius:8px}
-    #map{height:100%}
-    .mapwrap{height:100%;min-height:420px}
-    .sticky{position:sticky;top:8px;z-index:10}
-    .status{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;margin-top:6px;font-size:13px}
-    .status.pass{border-color:#c7eadf;background:#f3fbf8}
-    .status.fail{border-color:#f6d2cc;background:#fff5f3}
-    .legend{display:flex;gap:8px;align-items:center;font-size:12px}
-    .dot{width:10px;height:10px;border-radius:50%}
-    .dot.p{background:#e74c3c}.dot.c{background:#2e86de}.dot.s{background:#f1c40f}
-    .small{font-size:12px;color:#64748b}
-    .hr{height:1px;background:var(--line);margin:10px 0}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;border:1px solid #dfe5fd;color:#1e3a8a;font-size:12px}
-    @media (max-width: 900px){
-      .wrap{grid-template-columns:1fr;height:auto}
-      .mapwrap{height:calc(100svh - 58px)}
-      .toggle{display:inline-flex}
-      aside{position:fixed;left:0;top:58px;bottom:0;width:min(92vw,380px);max-width:92vw;background:var(--muted);transform:translateX(-110%);transition:transform .25s ease;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.12)}
-      .wrap.show-aside aside{transform:translateX(0)}
-      .wrap.show-aside::after{content:'';position:fixed;inset:58px 0 0 0;background:rgba(0,0,0,.28);z-index:900}
+    :root{
+      --bg:#0f1221; --panel:#14182b; --muted:#8c94af; --text:#e7ebff;
+      --accent:#5dd39e; --warn:#ffb020; --bad:#ff5c7a; --prod:#ff7a00; --cons:#2ea8ff; --sdis:#9b59b6;
     }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text); background:linear-gradient(180deg,#0f1221,#0b0e1a);
+      height:100dvh; display:flex; gap:12px; padding:12px;
+    }
+    #sidebar{
+      width:470px; max-width:100%; background:var(--panel); border:1px solid #222845;
+      border-radius:12px; padding:14px; overflow:auto;
+    }
+    h1{font-size:18px; margin:0 0 8px 0}
+    .sub{color:var(--muted); font-size:12px; margin-bottom:10px}
+    fieldset{border:1px solid #232947; border-radius:10px; margin:12px 0; padding:12px}
+    legend{padding:0 6px; color:var(--muted); font-size:12px}
+    label{display:block; margin:6px 0}
+    .row{display:flex; gap:8px; flex-wrap:wrap}
+    .btn{
+      background:#1a2040; color:var(--text); border:1px solid #2a315b; padding:8px 10px;
+      border-radius:8px; cursor:pointer; font-weight:600
+    }
+    .btn:hover{background:#1e2550}
+    .btn.danger{border-color:#4b2340; background:#2a1830}
+    .btn.danger:hover{background:#351a36}
+    .btn.secondary{background:#101435; border-color:#2a315b; color:#c7ceef}
+    .type{
+      display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #2a315b;
+      border-radius:8px; cursor:pointer; background:#151935
+    }
+    .type input{margin:0}
+    .dot{width:10px; height:10px; border-radius:50%}
+    .dot.prod{background:var(--prod)}
+    .dot.cons{background:var(--cons)}
+    .dot.sdis{background:var(--sdis)}
+    textarea{
+      width:100%; min-height:90px; resize:vertical; background:#0f1330; color:var(--text);
+      border:1px solid #2a315b; border-radius:8px; padding:8px; font-family:ui-monospace,Consolas,Menlo,monospace
+    }
+    input[type="number"], input[type="text"], input[type="file"]{
+      background:#0f1330; color:var(--text); border:1px solid #2a315b; border-radius:8px; padding:8px;
+    }
+    #map{flex:1; min-width:300px; border:1px solid #222845; border-radius:12px}
+    .hint{color:var(--muted); font-size:12px}
+    .status{padding:10px; border-radius:10px; margin-top:8px; font-weight:700}
+    .ok{background:rgba(93,211,158,.12); border:1px solid rgba(93,211,158,.5); color:var(--accent)}
+    .bad{background:rgba(255,92,122,.12); border:1px solid rgba(255,92,122,.5); color:var(--bad)}
+    .warn{background:rgba(255,176,32,.12); border:1px solid rgba(255,176,32,.5); color:var(--warn)}
+    .legend{display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; margin-top:6px}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    .mono{font-family:ui-monospace,Consolas,Menlo,monospace}
+    .selectable.selected{outline:2px dashed #5dd39e; outline-offset:4px}
+    .pill{display:inline-block; padding:2px 6px; border-radius:999px; border:1px solid #2a315b; color:var(--muted); font-size:12px}
   </style>
 </head>
 <body>
-  <header>
-    <div class="headrow">
-      <h1>ACC étendue – Étude PMO (≤ 20 km)</h1>
-      <button id="toggleAside" class="toggle">☰ Panneau</button>
-    </div>
-    <div class="sub">Echome Energies · Contrôles : <span class="pill">Distance max (règle CRE)</span>, <span class="pill">Centre libre (cercle minimal)</span>, <span class="pill">Emprise producteur (buffer)</span></div>
-  </header>
+  <div id="sidebar">
+    <h1>ACC étendue – Étude PMO</h1>
+    <div class="sub">IGN + INSEE · Centre libre ou Emprise producteur · Haversine ≈ · 2/10/20 km</div>
 
-  <div class="wrap">
-    <aside>
-      <!-- Statut règle officielle (distance max) -->
-      <div class="row status sticky" id="statusRule">Aucun point saisi.</div>
-
-      <div class="hr"></div>
-
-      <h2>1) Participants</h2>
+    <fieldset>
+      <legend>1) Participants</legend>
+      <div class="hint">Choisis un type puis clique sur la carte pour ajouter un point.</div>
+      <div class="row" role="radiogroup" aria-label="Type de point">
+        <label class="type"><input type="radio" name="ptype" value="consumer" checked><span class="dot cons"></span>Consommateur</label>
+        <label class="type"><input type="radio" name="ptype" value="producer"><span class="dot prod"></span>Producteur</label>
+        <label class="type"><input type="radio" name="ptype" value="sdis"><span class="dot sdis"></span>SDIS</label>
+      </div>
       <div class="row">
-        <label>Ajout rapide (clic sur la carte) — choisir le <strong>type</strong> :</label>
-        <select id="clickType">
-          <option value="consumer">Consommateur</option>
-          <option value="producer">Producteur</option>
-          <option value="sdis">SDIS</option>
-        </select>
+        <button id="clearAll" class="btn danger">Effacer tous les points</button>
+        <button id="exportCsv" class="btn secondary">Exporter CSV</button>
+        <button id="fitBtn" class="btn secondary">Ajuster la vue</button>
       </div>
-      <div class="row"><button id="clearBtn" class="btn">Effacer tous les points</button></div>
+      <div id="count" class="hint">Aucun point saisi pour l’instant.</div>
+      <div class="small muted">Suppression rapide: Alt+clic ou clic droit sur un marqueur, ou sélection puis touche Suppr.</div>
+    </fieldset>
 
-      <div class="hr"></div>
-
-      <h2>2) Saisie par adresse (géocodage)</h2>
-      <div class="row"><label>Nom</label><input id="addrName" placeholder="ex. Collège B" /></div>
-      <div class="row"><label>Adresse</label><input id="addrText" placeholder="ex. 12 rue de la Paix, 75002 Paris" /></div>
-      <div class="row"><label>Type</label>
-        <select id="addrType"><option value="consumer">Consommateur</option><option value="producer">Producteur</option><option value="sdis">SDIS</option></select>
-      </div>
-      <div class="row small"><label>Service (OSM Nominatim par défaut)</label><input id="geocodeEndpoint" placeholder="https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" /></div>
-      <div class="row"><button id="geocodeBtn" class="btn">Géocoder & ajouter</button></div>
-
-      <div class="hr"></div>
-
-      <h2>2bis) Géocodage par lots</h2>
-      <div class="row"><label>Liste (Nom;Adresse;Type)</label>
-        <textarea id="batchList" placeholder="Collège B;12 rue de la Paix, Paris;consumer
-SDIS 34;Béziers;sdis
-Usine A;47310 Estillac;producer"></textarea>
-      </div>
-      <div class="row"><button id="batchGeocodeBtn" class="btn">Géocoder la liste</button></div>
-      <div class="row small" id="batchStatus"></div>
-
-      <div class="hr"></div>
-
-      <h2>3) Import (lat/lon)</h2>
-      <div class="row"><label>Coller (Nom;Lat;Lon;Type) — ex. Usine A;45.76;4.84;consumer</label><textarea id="bulk"></textarea></div>
-      <div class="row"><button id="importBtn" class="btn">Importer la liste</button></div>
-
-      <div class="hr"></div>
-
-      <h2>4) Périmètre cible</h2>
+    <fieldset>
+      <legend>2) Import (optionnel)</legend>
+      <div class="hint">Coller une liste <span class="mono">Nom;Lat;Lon;Type</span> — ex. <span class="mono">Usine A;45.76;4.84;consumer</span></div>
+      <textarea id="importArea" placeholder="Nom;45.76;4.84;consumer"></textarea>
       <div class="row">
-        <label><input type="radio" name="limit" value="2"> 2 km (droit commun)</label><br/>
-        <label><input type="radio" name="limit" value="10"> 10 km (dérogation périurbaine)</label><br/>
-        <label><input type="radio" name="limit" value="20" checked> 20 km (dérogation rurale)</label><br/>
-        <label class="small"><input type="radio" name="limit" value="custom"> Perso : <input id="customKm" type="number" min="0" step="0.1" style="width:90px"> km</label>
+        <button id="importBtn" class="btn">Importer la liste</button>
+      </div>
+      <div class="hint">Ou importer une emprise producteur au format GeoJSON (Polygon/Multipolygon):</div>
+      <div class="row">
+        <input type="file" id="empriseFile" accept=".geojson,.json">
+        <button id="clearEmprise" class="btn secondary">Retirer l’emprise</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3) Périmètre cible</legend>
+      <div class="row">
+        <label><input type="radio" name="radius" value="2" checked> 2 km (droit commun)</label>
+        <label><input type="radio" name="radius" value="10"> 10 km (dérogation périurbaine)</label>
+        <label><input type="radio" name="radius" value="20"> 20 km (dérogation rurale)</label>
       </div>
       <div class="row" style="margin-top:6px">
-        <label><input id="includeSdis" type="checkbox"> Inclure SDIS dans les calculs</label>
-        <label><input id="showCircles" type="checkbox"> Afficher des cercles autour de chaque point</label>
+        <label>Personnalisé : <input id="customRadius" type="number" min="0" step="0.1" placeholder="km" style="width:120px"> km
+          <span class="hint">Laisse vide pour utiliser 2/10/20</span>
+        </label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label class="pill"><input id="showCircles" type="checkbox"> Cercles autour de chaque participant</label>
+        <label class="pill" title="Par défaut, le SDIS n’influence pas la distance réglementaire"><input id="includeSdis" type="checkbox"> Inclure SDIS au calcul</label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label class="pill"><input id="freeCenter" type="radio" name="mode" value="free" checked> Mode centre libre</label>
+        <label class="pill"><input id="empriseMode" type="radio" name="mode" value="emprise"> Mode emprise producteur</label>
+        <label class="pill"><input id="maxDist" type="radio" name="mode" value="pair"> Distance max entre participants</label>
       </div>
 
-      <div class="hr"></div>
+      <div id="report" class="status warn">En attente de points…</div>
+      <div id="details" class="small muted"></div>
+    </fieldset>
 
-      <h2>5) Centre libre (cercle englobant minimal)</h2>
-      <div class="row status" id="statusFree">En attente de points…</div>
+    <fieldset>
+      <legend>Cartes et données</legend>
+      <div class="hint">Fonds: OSM, OpenTopo, Carto Light, IGN (clé Geoportail requise). Overlay INSEE rural/périurbain.</div>
+      <div class="row">
+        <input id="ignKey" type="text" placeholder="Clé API IGN Géoportail (optionnel)" style="flex:1">
+        <button id="useIgn" class="btn secondary">Activer IGN</button>
+      </div>
+      <div class="row">
+        <button id="toggleInsee" class="btn secondary">Afficher/masquer grille INSEE</button>
+        <button id="printMap" class="btn secondary">Exporter image de la carte</button>
+      </div>
+      <div class="hint small">Place ton fichier INSEE ici: <span class="mono">/data/insee_grille.geojson</span></div>
+    </fieldset>
 
-      <div class="hr"></div>
+    <fieldset>
+      <legend>Légende</legend>
+      <div class="legend">
+        <span class="dot prod"></span><span>Producteur</span>
+        <span class="dot cons"></span><span>Consommateur</span>
+        <span class="dot sdis"></span><span>SDIS</span>
+      </div>
+    </fieldset>
 
-      <h2>6) Emprise producteur (GeoJSON)</h2>
-      <div class="row"><input type="file" id="empriseFile" accept=".geojson,.json" /></div>
-      <div class="row"><button id="clearEmprise" class="btn">Retirer l’emprise</button></div>
-      <div class="row status" id="statusEmprise">Aucune emprise chargée.</div>
-
-      <div class="hr"></div>
-
-      <h2>7) Vérification « même GRD »</h2>
-      <div class="row"><label>Charger un GeoJSON de périmètres GRD</label><input type="file" id="grdFile" accept=".geojson,.json" /></div>
-      <div class="row"><label>Attribut opérateur (ex. <em>grd</em> / <em>operator</em> / <em>distributor</em>)</label><input id="grdProp" placeholder="grd" /></div>
-      <div class="row"><button id="checkGrdBtn" class="btn">Analyser l’appartenance GRD</button></div>
-      <div class="row status" id="grdStatus">Aucun calque GRD chargé.</div>
-
-      <div class="hr"></div>
-
-      <h2>8) Cartes & données (IGN / INSEE)</h2>
-      <div class="row"><input id="ignKey" placeholder="Clé API IGN Géoportail (optionnel)" /><button id="saveIgn" class="btn">Activer & mémoriser (IGN)</button><button id="clearIgn" class="btn">Désactiver IGN</button></div>
-      <div class="row"><label>Charger une grille INSEE (GeoJSON)</label><input type="file" id="inseeFile" accept=".geojson,.json" /><button id="clearInsee" class="btn">Retirer INSEE</button></div>
-      <div class="row small" id="inseeStatus">Aucune grille INSEE chargée.</div>
-
-      <div class="hr"></div>
-
-      <h2>9) Export</h2>
-      <div class="row"><button id="exportGeojsonBtn" class="btn">Exporter GeoJSON</button></div>
-      <div class="row"><button id="exportCsvBtn" class="btn">Exporter CSV</button></div>
-      <div class="row"><button id="exportPdfBtn" class="btn primary">Exporter PDF (carte + tableau)</button></div>
-      <div class="row"><button id="printMapBtn" class="btn">Exporter image de la carte</button></div>
-
-      <div class="hr"></div>
-
-      <h2>Légende</h2>
-      <div class="legend"><span class="dot p"></span> Producteur · <span class="dot c"></span> Consommateur · <span class="dot s"></span> SDIS</div>
-
-      <div class="hr"></div>
-      <div class="note"><strong>Mémo réglementaire</strong><br/>• Contrôle officiel : <em>distance maximale entre les deux participants les plus éloignés</em> ≤ 2/10/20 km.<br/>• <em>Centre libre</em> (pédago avancé) : on vérifie l’existence d’un cercle englobant minimal ≤ R.<br/>• <em>Emprise</em> : buffer de l’emprise producteur à R km et inclusion des participants.<br/>• Par défaut, le SDIS est exclu des calculs (case à cocher pour l’inclure).</div>
-
-      <div class="hr"></div>
-      <div id="selfcheck" class="small">Self-checks : en attente…</div>
-    </aside>
-
-    <div class="mapwrap" style="position:relative"><div id="map" aria-label="Carte interactive"></div></div>
+    <fieldset>
+      <legend>Rappels officiels (synthèse)</legend>
+      <ul class="small muted" style="margin:0 0 0 16px; padding:0 0 0 6px; list-style:disc">
+        <li>ACC étendue ≤ 20 km = dérogation ministérielle (PMO), en zone rurale (grille INSEE).</li>
+        <li>La distance s’apprécie entre les deux participants les plus éloignés (mode “distance max”).</li>
+        <li>L’adhésion du SDIS à la PMO n’étend pas, à elle seule, le périmètre.</li>
+        <li>Anticiper les exigences SDIS (coupures, cheminements, DECI / RDDECI) pour chaque site.</li>
+      </ul>
+    </fieldset>
   </div>
 
-<script>
-// ——— Utils
-function haversineKm(a, b){
-  const R = 6371; const toRad = d => d*Math.PI/180;
-  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
-  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
-  return 2*R*Math.asin(Math.sqrt(h));
-}
-function splitLines(text){ return (text||'').split(/\r?\n/); }
+  <div id="map" aria-label="Carte interactive"></div>
 
-// Proj. locale (approx. métrique pour centre libre)
-function projectLocal(pointsLL){
-  const lat0 = pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length;
-  const lon0 = pointsLL.reduce((s,p)=>s+p.lon,0)/pointsLL.length;
-  const pts = pointsLL.map(p=>({ x:(p.lon-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32, ref:p }));
-  return {lat0, lon0, pts};
-}
-function unprojectLocal(lat0, lon0, x, y){
-  const lat = lat0 + y/111.32;
-  const lon = lon0 + x/(111.32*Math.cos(lat0*Math.PI/180));
-  return {lat, lon};
-}
-// MEC (Welzl) en 2D plan
-function mec(pts){
-  function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
-  function circle2(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:dist(a,b)/2}; }
-  function circle3(a,b,c){ const A=b.x-a.x, B=b.y-a.y, C=c.x-a.x, D=c.y-a.y; const E=A*(a.x+b.x)+B*(a.y+b.y); const F=C*(a.x+c.x)+D*(a.y+c.y); const G=2*(A*(c.y-b.y)-B*(c.x-b.x)); if(Math.abs(G)<1e-12){ const cand=[circle2(a,b),circle2(a,c),circle2(b,c)]; let best=null; for(const cc of cand){ if([a,b,c].every(p=>dist(p,cc)<=cc.r+1e-9)) if(!best||cc.r<best.r) best=cc; } return best; } const cx=(D*E-B*F)/G, cy=(A*F-C*E)/G; return {x:cx,y:cy,r:dist({x:cx,y:cy},a)}; }
-  function inside(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
-  function welzl(P,R,n){ if(n===0||R.length===3){ if(R.length===0) return {x:0,y:0,r:0}; if(R.length===1) return {x:R[0].x,y:R[0].y,r:0}; if(R.length===2) return circle2(R[0],R[1]); return circle3(R[0],R[1],R[2]); } const p=P[n-1]; const c=welzl(P,R,n-1); if(inside(c,p)) return c; return welzl(P,R.concat([p]),n-1); }
-  const P=pts.slice(); for(let i=P.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [P[i],P[j]]=[P[j],P[i]]; } return welzl(P,[],P.length);
-}
+  <script>
+    // --- Map init (centrée sur Auvergne–Rhône–Alpes) ---
+    const map = L.map('map', { zoomControl: true }).setView([45.5, 5.7], 8);
 
-// ——— Map
-const map = L.map('map', { zoomControl: true }).setView([46.6, 2.0], 6);
-const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom: 19, attribution:'© OpenStreetMap' }).addTo(map);
-L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
-const printer = L.easyPrint({ tileLayer: osmLayer, sizeModes: ['A4Portrait','A4Landscape'], filename: 'acc_etendue_carte', exportOnly: true, hideControlContainer: false }).addTo(map);
+    // Basemaps (en ligne)
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom: 19, attribution:'© OpenStreetMap' }).addTo(map);
+    const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{ maxZoom: 17, attribution:'© OpenTopoMap, © OpenStreetMap' });
+    const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{ maxZoom: 19, attribution:'© Carto, © OpenStreetMap' });
+    let ignLayer = null;
 
-document.getElementById('printMapBtn').onclick = ()=> printer.printMap('A4Landscape', 'acc_etendue_carte');
+    const baseLayers = {"OSM Standard": osm, "OpenTopoMap": topo, "Carto Light": cartoLight};
+    const overlays = {};
+    L.control.layers(baseLayers, overlays, { position: 'topleft', collapsed: true }).addTo(map);
 
-const participants = []; // {id,name,type,lat,lng,marker,grd,inCircle}
-const colors = { producer:'#e74c3c', consumer:'#2e86de', sdis:'#f1c40f' };
-let uid = 0;
+    // Contrôle impression
+    const printer = L.easyPrint({ tileLayer: osm, sizeModes: ['A4Portrait','A4Landscape'], filename: 'acc_etendue_carte', exportOnly: true, hideControlContainer: false }).addTo(map);
 
-// Layers avancés
-let empriseLayer=null, empriseBufferLayer=null; // GeoJSON emprise + buffer
-let inseeLayer=null; // Grille INSEE
-let ignLayer=null; // Fond IGN
-let freeCircle=null, freeCenter=null;          // Cercle centre libre
+    // --- State ---
+    const points = []; // {id,name,lat,lon,type,marker}
+    const circles = [];
+    let idSeq = 1;
+    let selectedPointId = null;
+    let accCircle = null, accCenterMarker = null;
 
-function getLimitKm(){
-  const sel = document.querySelector('input[name="limit"]:checked').value;
-  if(sel === 'custom'){
-    const v = parseFloat(document.getElementById('customKm').value||'0');
-    return isNaN(v)||v<=0 ? 20 : v;
-  }
-  return parseFloat(sel);
-}
-function selectedIncludeSdis(){ return document.getElementById('includeSdis').checked; }
+    // Emprise producteur
+    let empriseLayer = null;           // couche GeoJSON emprise
+    let empriseBufferLayer = null;     // buffer à R km
 
-function styleMarker(p){
-  const color = colors[p.type] || '#555';
-  const stroke = p.inCircle ? '#16a34a' : '#333';
-  const weight = p.inCircle ? 3 : 1;
-  p.marker.setStyle({radius:6, color:stroke, weight, fillColor:color, fillOpacity:0.9});
-}
+    // INSEE overlay
+    let inseeLayer = null;
+    let inseeVisible = false;
 
-function addParticipant(lat, lng, name, type){
-  const p = {id:++uid, name:(name||'Sans nom'), type:(type||'consumer'), lat, lng, grd:null, inCircle:false};
-  p.marker = L.circleMarker([lat, lng], {radius:6, color:'#333', weight:1, fillColor:(colors[p.type]||'#555'), fillOpacity:0.9}).addTo(map);
-  p.marker.bindTooltip(`${p.name} (${p.type})`, {permanent:false});
-  p.marker.on('contextmenu', ()=> removeParticipant(p.id));
-  participants.push(p);
-  refreshAll();
-}
-function removeParticipant(id){
-  const idx = participants.findIndex(x=> x.id===id);
-  if(idx>-1){ map.removeLayer(participants[idx].marker); participants.splice(idx,1); }
-  refreshAll();
-}
+    // --- UI elements ---
+    const countEl = document.getElementById('count');
+    const reportEl = document.getElementById('report');
+    const detailsEl = document.getElementById('details');
+    const customRadiusEl = document.getElementById('customRadius');
+    const showCirclesEl = document.getElementById('showCircles');
+    const includeSdisEl = document.getElementById('includeSdis');
+    const ignKeyEl = document.getElementById('ignKey');
 
-// Cercles autour de chaque point (pédago)
-const perPointCircles=[];
-function clearPerPointCircles(){ perPointCircles.forEach(c=> map.removeLayer(c)); perPointCircles.length=0; }
-function refreshPerPointCircles(){
-  clearPerPointCircles(); if(!document.getElementById('showCircles').checked) return;
-  const r = getLimitKm()*1000; participants.forEach(p=>{ const c=L.circle([p.lat,p.lng],{radius:r,color:'#0ea5a6',weight:2,fill:false,opacity:0.9}); c.addTo(map); perPointCircles.push(c); });
-}
+    // Modes
+    const modeFreeEl = document.getElementById('freeCenter');
+    const modeEmpriseEl = document.getElementById('empriseMode');
+    const modePairEl = document.getElementById('maxDist');
 
-// Règle officielle : distance max entre deux éligibles
-function refreshRuleStatus(){
-  const box = document.getElementById('statusRule');
-  const eligible = participants.filter(p=> selectedIncludeSdis() ? true : p.type!=='sdis');
-  if(eligible.length<2){ box.className='status'; box.textContent='Ajoutez au moins deux participants éligibles.'; return; }
-  let maxKm=0, pair=null;
-  for(let i=0;i<eligible.length;i++){
-    for(let j=i+1;j<eligible.length;j++){
-      const a=eligible[i], b=eligible[j];
-      const d=haversineKm({lat:a.lat,lng:a.lng},{lat:b.lat,lng:b.lng});
-      if(d>maxKm){ maxKm=d; pair=[a,b]; }
+    // --- Helpers ---
+    function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
+    function selectedRadiusKm(){
+      const v = customRadiusEl.value.trim();
+      if(v !== '' && !isNaN(v)) return Math.max(0, parseFloat(v));
+      return parseFloat(document.querySelector('input[name="radius"]:checked').value);
     }
-  }
-  const limit=getLimitKm(); const pass=maxKm<=limit+1e-6;
-  box.className='status '+(pass?'pass':'fail');
-  const names = pair ? `${pair[0].name} ↔ ${pair[1].name}` : '';
-  box.innerHTML = `<strong>Distance max (CRE)</strong> : ${maxKm.toFixed(2)} km (limite : ${limit} km) · ${pass?'<span style="color:var(--ok)">OK</span>':'<span style="color:var(--warn)">Hors périmètre</span>'}<br/><span class="small">Paire la plus éloignée : ${names}</span>`;
-}
-
-// Centre libre : cercle englobant minimal
-function clearFreeCircle(){ if(freeCircle){map.removeLayer(freeCircle);freeCircle=null;} if(freeCenter){map.removeLayer(freeCenter);freeCenter=null;} }
-function refreshFreeStatus(){
-  const box = document.getElementById('statusFree');
-  clearFreeCircle();
-  const eligible = participants.filter(p=> selectedIncludeSdis() ? true : p.type!=='sdis');
-  if(eligible.length===0){ box.className='status'; box.textContent='En attente de points…'; return; }
-  const {lat0, lon0, pts} = projectLocal(eligible.map(p=>({lat:p.lat, lon:p.lng})));
-  const c = mec(pts);
-  const centerLL = unprojectLocal(lat0, lon0, c.x, c.y);
-  const rKm = c.r; // car projectLocal en km approx
-  const limit=getLimitKm(); const pass = rKm <= limit + 1e-9;
-  box.className = 'status ' + (pass?'pass':'fail');
-  box.innerHTML = (pass?'<strong>Conforme</strong>':'<strong>Non conforme</strong>') + ` (centre libre) — rayon requis: ${rKm.toFixed(2)} km (seuil: ${limit} km)` +
-    `<br/><span class="small">Centre suggéré: ${centerLL.lat.toFixed(5)}, ${centerLL.lon.toFixed(5)} · Points couverts: ${eligible.length}</span>`;
-  freeCircle = L.circle([centerLL.lat,centerLL.lon], {radius:rKm*1000, color: pass?'#16a34a':'#b91c1c', weight:2, fill:false, opacity:0.9}).addTo(map);
-  freeCenter = L.circleMarker([centerLL.lat,centerLL.lon], {radius:5, color: pass?'#16a34a':'#b91c1c', weight:2, fillOpacity:0.6}).addTo(map);
-}
-
-// Emprise producteur (buffer + inclusion)
-function clearEmprise(){ if(empriseLayer){map.removeLayer(empriseLayer);empriseLayer=null;} if(empriseBufferLayer){map.removeLayer(empriseBufferLayer);empriseBufferLayer=null;} }
-function refreshEmprise(){
-  const box = document.getElementById('statusEmprise');
-  if(!empriseLayer){ box.className='status'; box.textContent='Aucune emprise chargée.'; return; }
-  if(empriseBufferLayer){ map.removeLayer(empriseBufferLayer); empriseBufferLayer=null; }
-  const rKm = getLimitKm();
-  const gj = empriseLayer.toGeoJSON();
-  const buffered = turf.buffer(gj, rKm, {units:'kilometers'});
-  empriseBufferLayer = L.geoJSON(buffered, { style:{color:'#0ea5a6', weight:2, dashArray:'6 4', fillOpacity:0.05} }).addTo(map);
-  const eligible = participants.filter(p=> selectedIncludeSdis() ? true : p.type!=='sdis');
-  let inside=0; eligible.forEach(p=>{ const pt=turf.point([p.lng,p.lat]); let ok=false; turf.flattenEach(buffered, f=>{ if(turf.booleanPointInPolygon(pt,f)) ok=true; }); if(ok) inside++; });
-  const pass = eligible.length>0 && inside===eligible.length;
-  box.className='status ' + (pass?'pass':'fail');
-  box.textContent = (pass?'Conforme (emprise + buffer)':'Non conforme (emprise + buffer)') + ` — rayon: ${rKm} km · ${inside}/${eligible.length} point(s) dans le buffer`;
-}
-
-// Rafraîchir tout
-function refreshAll(){ refreshRuleStatus(); refreshFreeStatus(); refreshEmprise(); refreshPerPointCircles(); }
-
-// Map clicks
-map.on('click', (e)=>{
-  const type = document.getElementById('clickType').value;
-  const name = prompt('Nom du participant ?'); if(!name) return;
-  addParticipant(e.latlng.lat, e.latlng.lng, name.trim(), type);
-});
-
-// UI: clear / limit / imports / options
- document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
- document.getElementsByName('limit').forEach(r=> r.addEventListener('change', refreshAll));
- document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked){ refreshAll(); }});
- document.getElementById('includeSdis').addEventListener('change', refreshAll);
- document.getElementById('showCircles').addEventListener('change', refreshPerPointCircles);
-
- // Import lat/lon
- document.getElementById('importBtn').onclick = ()=>{
-   const txt = (document.getElementById('bulk').value||'').trim(); if(!txt) return;
-   const lines = splitLines(txt);
-   lines.forEach(line=>{
-     if(!line.trim()) return;
-     const parts = line.split(/[;,]|\t/).map(s=>s.trim());
-     if(parts.length<4) return; const [name, lat, lon, type] = parts;
-     const la = parseFloat(lat), lo = parseFloat(lon); if(isNaN(la)||isNaN(lo)) return;
-     addParticipant(la, lo, name, (''+type).toLowerCase());
-   });
- };
-
- // Géocodage simple
- async function geocodeAddress(){
-  const addr = (document.getElementById('addrText').value||'').trim();
-  const name = (document.getElementById('addrName').value||addr).trim();
-  const type = document.getElementById('addrType').value;
-  if(!addr){ alert('Renseignez une adresse.'); return; }
-  let endpoint = (document.getElementById('geocodeEndpoint').value||'').trim();
-  if(!endpoint) endpoint = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=';
-  try{
-    const url = endpoint + encodeURIComponent(addr);
-    const res = await fetch(url, {headers:{'Accept':'application/json'}});
-    if(!res.ok) throw new Error('Géocodage indisponible');
-    const js = await res.json(); if(!js||!js.length){ alert('Adresse introuvable.'); return; }
-    const {lat, lon, display_name} = js[0];
-    addParticipant(parseFloat(lat), parseFloat(lon), name||display_name, type);
-    map.setView([parseFloat(lat), parseFloat(lon)], 14);
-  }catch(e){ alert('Erreur de géocodage : '+e.message); }
- }
- document.getElementById('geocodeBtn').onclick = geocodeAddress;
-
- // Géocodage par lots
- async function geocodeBatch(){
-  const list = splitLines((document.getElementById('batchList').value||'').trim()).filter(Boolean);
-  if(!list.length){ alert('Collez des lignes (Nom;Adresse;Type).'); return; }
-  const endpoint = (document.getElementById('geocodeEndpoint').value||'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=');
-  const status = document.getElementById('batchStatus'); let ok=0, ko=0;
-  for(let i=0;i<list.length;i++){
-    status.textContent = `Géocodage ${i+1}/${list.length}…`;
-    const parts = list[i].split(/[;,]|\t/).map(s=>s.trim());
-    if(parts.length<2){ ko++; continue; }
-    const [name, address, type='consumer'] = parts;
-    try{
-      const url = endpoint + encodeURIComponent(address);
-      const res = await fetch(url, {headers:{'Accept':'application/json'}});
-      const js = await res.json();
-      if(js && js[0]){ addParticipant(parseFloat(js[0].lat), parseFloat(js[0].lon), name||js[0].display_name, (''+type).toLowerCase()); ok++; }
-      else { ko++; }
-    }catch(e){ ko++; }
-    await new Promise(r=> setTimeout(r, 1100)); // respect Nominatim
-  }
-  status.textContent = `Terminé : ${ok} ajouté(s), ${ko} échec(s).`;
- }
- document.getElementById('batchGeocodeBtn').onclick = geocodeBatch;
-
- // Emprise: import/clear
- document.getElementById('empriseFile').addEventListener('change', async (e)=>{
-  const f = e.target.files[0]; if(!f) return; const txt = await f.text();
-  try{
-    const gj = JSON.parse(txt);
-    // Sanity Polygon/MultiPolygon
-    let ok=false; L.geoJSON(gj,{onEachFeature:(feat)=>{ if(['Polygon','MultiPolygon'].includes(feat.geometry?.type)) ok=true; }});
-    if(!ok){ alert('Le GeoJSON doit contenir un Polygon ou MultiPolygon (EPSG:4326).'); return; }
-    if(empriseLayer) map.removeLayer(empriseLayer);
-    empriseLayer = L.geoJSON(gj, {style:{color:'#e67e22', weight:2, fillOpacity:0.1}}).addTo(map);
-    map.fitBounds(empriseLayer.getBounds().pad(0.2));
-    refreshAll();
-  }catch(err){ alert('GeoJSON invalide.'); }
- });
- document.getElementById('clearEmprise').addEventListener('click', ()=>{ clearEmprise(); refreshAll(); });
-
- // GRD overlay
- let grdLayer=null, grdFeatures=null;
- function loadGrdGeoJSON(text){
-  try{
-    const js = JSON.parse(text);
-    if(grdLayer){ map.removeLayer(grdLayer); grdLayer=null; }
-    grdLayer = L.geoJSON(js, {style:{color:'#7c3aed', weight:1, fillOpacity:0.05}}).addTo(map);
-    grdFeatures = (js.type==='FeatureCollection') ? js.features : [js];
-    const b = document.getElementById('grdStatus'); b.className='status';
-    b.textContent = 'Calque GRD chargé ('+grdFeatures.length+' polygone(s)). Cliquez « Analyser ».';
-  }catch(e){ alert('GeoJSON invalide : '+e.message); }
- }
- document.getElementById('grdFile').addEventListener('change', function(){ const f=this.files && this.files[0]; if(!f) return; const rdr=new FileReader(); rdr.onload=e=>loadGrdGeoJSON(e.target.result); rdr.readAsText(f); });
- function analyzeGrd(){
-  if(!grdFeatures){ alert('Chargez un GeoJSON de périmètres GRD.'); return; }
-  const prop = (document.getElementById('grdProp').value||'grd').trim();
-  const counts = new Map(); let missing=0;
-  participants.forEach(p=>{
-    p.grd=null; const pt=turf.point([p.lng,p.lat]);
-    for(const feat of grdFeatures){ if(!feat||!feat.geometry) continue; try{ if(turf.booleanPointInPolygon(pt, feat)){
-      const pr=feat.properties||{}; const v = pr[prop] ?? pr.operator ?? pr.distributor ?? null; p.grd = v!=null? String(v):null; break; } }catch(e){}
+    function selectedMode(){ return document.querySelector('input[name="mode"]:checked').value; }
+    function typeColor(t){ if(t==='producer') return 'var(--prod)'; if(t==='consumer') return 'var(--cons)'; return 'var(--sdis)'; }
+    function humanType(t){ return t==='producer'?'Producteur':t==='consumer'?'Consommateur':'SDIS'; }
+    function updateCount(){
+      const n = points.length;
+      countEl.textContent = n ? `${n} point${n>1?'s':''} saisi${n>1?'s':''}.` : 'Aucun point saisi pour l’instant.';
     }
-    const key=p.grd||'(inconnu)'; counts.set(key,(counts.get(key)||0)+1); if(!p.grd) missing++;
-  });
-  const uniques = Array.from(new Set(participants.map(p=> p.grd || null)));
-  const same = uniques.filter(v=> v!==null).length===1 && missing===0;
-  const box=document.getElementById('grdStatus'); box.className='status '+(same?'pass':'fail');
-  const list=Array.from(counts.entries()).map(([k,v])=> `${k}: ${v}`).join(' · ');
-  box.innerHTML = '<strong>Vérification "même GRD"</strong> — '+(same?'<span style="color:var(--ok)">OK (tous identiques)</span>':'<span style="color:var(--warn)">Non homogène ou inconnus</span>')+'<br/><span class="small">Répartition : '+list+'</span>';
- }
- document.getElementById('checkGrdBtn').onclick = analyzeGrd;
+    function fitToData(){
+      const layers = [];
+      points.forEach(p=>layers.push(p.marker));
+      if(empriseLayer) layers.push(empriseLayer);
+      if(!layers.length) return;
+      const group = new L.featureGroup(layers);
+      map.fitBounds(group.getBounds().pad(0.2));
+    }
+    function haversineKm(lat1, lon1, lat2, lon2){
+      const R = 6371;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+    function computeMaxDistance(includeSdis=false){
+      const eligible = points.filter(p => includeSdis ? true : (p.type!=='sdis'));
+      if(eligible.length < 2) return {max:0, pair:null, considered:eligible.length};
+      let max = -1, pair = null;
+      for(let i=0;i<eligible.length;i++){
+        for(let j=i+1;j<eligible.length;j++){
+          const a = eligible[i], b = eligible[j];
+          const d = haversineKm(a.lat, a.lon, b.lat, b.lon);
+          if(d > max){ max = d; pair = [a,b]; }
+        }
+      }
+      return {max, pair, considered:eligible.length};
+    }
+    function clearCircles(){ circles.forEach(c => map.removeLayer(c)); circles.length = 0; }
+    function refreshCircles(){
+      clearCircles();
+      if(!showCirclesEl.checked) return;
+      const r = selectedRadiusKm() * 1000;
+      points.forEach(p=>{
+        const c = L.circle([p.lat, p.lon], { radius: r, color: typeColor(p.type), weight:1, opacity:0.9, fillOpacity:0.06 }).addTo(map);
+        circles.push(c);
+      });
+    }
+    function showAccCircle(center, radiusKm, color='#5dd39e'){
+      if(accCircle){ map.removeLayer(accCircle); accCircle = null; }
+      if(accCenterMarker){ map.removeLayer(accCenterMarker); accCenterMarker = null; }
+      accCircle = L.circle(center, { radius: radiusKm * 1000, color, weight:2, opacity:0.9, fillOpacity:0.05 }).addTo(map);
+      accCenterMarker = L.circleMarker(center, {radius:5, color, weight:2, fillOpacity:0.6}).addTo(map);
+    }
+    function clearAccCircle(){
+      if(accCircle){ map.removeLayer(accCircle); accCircle = null; }
+      if(accCenterMarker){ map.removeLayer(accCenterMarker); accCenterMarker = null; }
+    }
+    function projectLocal(pointsLL){
+      const lat0 = pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length;
+      const lon0 = pointsLL.reduce((s,p)=>s+p.lon,0)/pointsLL.length;
+      const pts = pointsLL.map(p=>{
+        const x = (p.lon - lon0) * 111.32 * Math.cos(lat0*Math.PI/180);
+        const y = (p.lat - lat0) * 111.32;
+        return {x, y, ref:p};
+      });
+      return {lat0, lon0, pts};
+    }
+    function unprojectLocal(lat0, lon0, x, y){
+      const lat = lat0 + y/111.32;
+      const lon = lon0 + x/(111.32 * Math.cos(lat0*Math.PI/180));
+      return {lat, lon};
+    }
+    function mec(points){ // Welzl
+      function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+      function circle2(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:dist(a,b)/2}; }
+      function circle3(a,b,c){
+        const A=b.x-a.x, B=b.y-a.y, C=c.x-a.x, D=c.y-a.y;
+        const E=A*(a.x+b.x)+B*(a.y+b.y);
+        const F=C*(a.x+c.x)+D*(a.y+c.y);
+        const G=2*(A*(c.y-b.y)-B*(c.x-b.x));
+        if(Math.abs(G)<1e-12){
+          const candidates=[circle2(a,b),circle2(a,c),circle2(b,c)];
+          let best=null;
+          for(const cc of candidates){
+            if([a,b,c].every(p=>dist(p,cc)<=cc.r+1e-9)) if(!best||cc.r<best.r) best=cc;
+          }
+          return best;
+        } else {
+          const cx=(D*E-B*F)/G, cy=(A*F-C*E)/G, r=dist({x:cx,y:cy},a);
+          return {x:cx,y:cy,r};
+        }
+      }
+      function isIn(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
+      function welzl(P, R, n){
+        if(n===0 || R.length===3){
+          if(R.length===0) return {x:0,y:0,r:0};
+          if(R.length===1) return {x:R[0].x,y:R[0].y,r:0};
+          if(R.length===2) return circle2(R[0],R[1]);
+          return circle3(R[0],R[1],R[2]);
+        }
+        const p = P[n-1];
+        const c = welzl(P, R, n-1);
+        if(isIn(c,p)) return c;
+        return welzl(P, R.concat([p]), n-1);
+      }
+      const P = points.slice();
+      for(let i=P.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [P[i],P[j]]=[P[j],P[i]]; }
+      return welzl(P, [], P.length);
+    }
 
- // Export helpers
- function buildCSVString(){
-  const header=['name','lat','lon','type','grd'];
-  const rows=participants.map(p=>[p.name,p.lat,p.lng,p.type,p.grd||'']);
-  const csv=[header.join(','),...rows.map(r=> r.map(x=>(''+x).includes(',') ? '"'+((''+x).replace(/"/g,'""'))+'"' : x).join(','))].join('\n');
-  return csv;
- }
+    // --- Emprise producteur: gestion & buffer ---
+    function clearEmprise(){
+      if(empriseLayer){ map.removeLayer(empriseLayer); empriseLayer = null; }
+      if(empriseBufferLayer){ map.removeLayer(empriseBufferLayer); empriseBufferLayer = null; }
+    }
+    function loadEmpriseGeoJSON(geojson){
+      clearEmprise();
+      empriseLayer = L.geoJSON(geojson, {
+        style: {color:'#ff7a00', weight:2, fillOpacity:0.1}
+      }).addTo(map);
+      fitToData();
+      refreshReport();
+    }
+    function refreshEmpriseBuffer(){
+      if(empriseBufferLayer){ map.removeLayer(empriseBufferLayer); empriseBufferLayer = null; }
+      if(!empriseLayer) return;
+      const rKm = selectedRadiusKm();
+      const gj = empriseLayer.toGeoJSON();
+      // Buffer en kilomètres (Turf attend des unités)
+      const buffered = turf.buffer(gj, rKm, {units:'kilometers'});
+      empriseBufferLayer = L.geoJSON(buffered, { style:{color:'#5dd39e', weight:2, dashArray:'6 4', fillOpacity:0.05} }).addTo(map);
+    }
+    function allEligiblePointsInsideEmpriseBuffer(includeSdis=false){
+      if(!empriseLayer) return {ok:false, total:0, inside:0};
+      const gjBuffer = empriseBufferLayer ? empriseBufferLayer.toGeoJSON() : null;
+      if(!gjBuffer) return {ok:false, total:0, inside:0};
+      const eligible = points.filter(p => includeSdis ? true : p.type!=='sdis');
+      let inside=0;
+      for(const p of eligible){
+        const pt = turf.point([p.lon, p.lat]);
+        let contained = false;
+        turf.flattenEach(gjBuffer, feat=>{
+          if(turf.booleanPointInPolygon(pt, feat)) contained = true;
+        });
+        if(contained) inside++;
+      }
+      return {ok: inside === eligible.length && eligible.length>0, total:eligible.length, inside};
+    }
 
- // Export GeoJSON / CSV / PDF
- function exportGeoJSON(){
-  const fc={type:'FeatureCollection',features:participants.map(p=>({type:'Feature',geometry:{type:'Point',coordinates:[p.lng,p.lat]},properties:{name:p.name,type:p.type,grd:p.grd||null}}))};
-  const blob=new Blob([JSON.stringify(fc,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='participants_acc.geojson'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1500);
- }
- document.getElementById('exportGeojsonBtn').onclick = exportGeoJSON;
+    // --- Report ---
+    function refreshReport(){
+      const rKm = selectedRadiusKm();
+      const includeSdis = includeSdisEl.checked;
+      const mode = selectedMode();
 
- function exportCSV(){ const csv = buildCSVString(); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='participants_acc.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
- document.getElementById('exportCsvBtn').onclick = exportCSV;
+      clearAccCircle();
+      if(mode==='emprise'){ refreshEmpriseBuffer(); }
 
- async function exportPDF(){
-  const { jsPDF } = window.jspdf; const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'}); const pad=28;
-  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('ACC étendue — Rapport', pad, pad+4);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  // Règle officielle
-  const eligible = participants.filter(p=> selectedIncludeSdis() ? true : p.type!=='sdis');
-  let maxKm=0, pair=null; for(let i=0;i<eligible.length;i++){ for(let j=i+1;j<eligible.length;j++){ const d=haversineKm(eligible[i],eligible[j]); if(d>maxKm){maxKm=d; pair=[eligible[i],eligible[j]];} } }
-  const limit=getLimitKm(); const summary=`Distance max: ${maxKm.toFixed(2)} km (limite: ${limit} km) — Paire: ${pair?pair[0].name+' ↔ '+pair[1].name:'n/a'}`; doc.text(summary, pad, pad+22);
-  // Carte
-  const mapEl=document.getElementById('map'); const canvas=await html2canvas(mapEl,{useCORS:true,logging:false,scale:2}); const imgData=canvas.toDataURL('image/png'); const pageW=doc.internal.pageSize.getWidth(); const pageH=doc.internal.pageSize.getHeight(); const imgW=pageW-pad*2; const ratio=canvas.height/canvas.width; const imgH=imgW*ratio; doc.addImage(imgData,'PNG',pad,pad+40,imgW,Math.min(imgH,pageH-220));
-  // Tableau
-  const rows=participants.map(p=>[p.name,p.type,p.lat.toFixed(6),p.lng.toFixed(6),p.grd||'']);
-  doc.autoTable({ startY: pageH-160, head: [['Nom','Type','Lat','Lon','GRD']], body: rows, styles:{fontSize:8}, headStyles:{fillColor:[55,195,175]} });
-  doc.save('rapport_acc.pdf');
- }
- document.getElementById('exportPdfBtn').onclick = exportPDF;
+      const eligible = points.filter(p => includeSdis ? true : p.type!=='sdis');
 
- // Init quelques points démo
- addParticipant(48.8566, 2.3522, 'Consommateur Paris', 'consumer');
- addParticipant(47.2184, -1.5536, 'Producteur Nantes', 'producer');
- addParticipant(47.9025, 1.9090, 'SDIS 45', 'sdis');
- map.fitBounds(L.featureGroup(participants.map(p=>p.marker)).getBounds().pad(0.3));
- refreshAll();
+      if(points.length === 0 && mode!=='emprise'){
+        reportEl.className = 'status warn';
+        reportEl.textContent = 'En attente de points…';
+        detailsEl.textContent = '';
+        return;
+      }
 
- // Mobile: toggle panneau
- const wrapEl = document.querySelector('.wrap');
- const tgl = document.getElementById('toggleAside');
- if(tgl){ tgl.onclick = ()=> wrapEl.classList.toggle('show-aside'); }
- const mapwrap = document.querySelector('.mapwrap');
- if(mapwrap){ mapwrap.addEventListener('click', ()=> wrapEl.classList.remove('show-aside')); }
- window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') wrapEl.classList.remove('show-aside'); });
+      if(mode==='emprise'){
+        if(!empriseLayer){
+          reportEl.className = 'status warn';
+          reportEl.textContent = 'Importe une emprise producteur (GeoJSON) pour utiliser ce mode.';
+          detailsEl.textContent = 'Formats: Polygon ou MultiPolygon (EPSG:4326).';
+          return;
+        }
+        if(eligible.length===0){
+          reportEl.className = 'status warn';
+          reportEl.textContent = 'Aucun participant éligible à vérifier (SDIS exclu si non coché).';
+          detailsEl.textContent = '';
+          return;
+        }
+        const res = allEligiblePointsInsideEmpriseBuffer(includeSdis);
+        const ok = res.ok;
+        reportEl.className = 'status ' + (ok ? 'ok' : 'bad');
+        reportEl.textContent = (ok ? 'Conforme (emprise + buffer)' : 'Non conforme (emprise + buffer)') +
+          ` — rayon: ${rKm} km · ${res.inside}/${res.total} point(s) dans le buffer`;
+        detailsEl.innerHTML = 'Le buffer est une somme de Minkowski (offset) de l’emprise à ' + rKm + ' km.';
+        return;
+      }
 
-// ——— IGN enable/disable + persistence
-function enableIGN(key){
-  if(ignLayer) { try{ map.removeLayer(ignLayer); }catch(_){} ignLayer=null; }
-  ignLayer = L.tileLayer(`https://wxs.ign.fr/${key}/geoportail/wmts?layer=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix={z}&TileCol={x}&TileRow={y}`, { maxZoom: 19, attribution: '© IGN - Géoportail' });
-  ignLayer.addTo(map);
-}
-const ignKeyInput = document.getElementById('ignKey');
-const saveIgnBtn = document.getElementById('saveIgn');
-const clearIgnBtn = document.getElementById('clearIgn');
-if(saveIgnBtn){ saveIgnBtn.onclick = ()=>{ const k=(ignKeyInput.value||'').trim(); if(!k){ alert('Renseigne une clé IGN.'); return; } localStorage.setItem('ignKey', k); enableIGN(k); }; }
-if(clearIgnBtn){ clearIgnBtn.onclick = ()=>{ if(ignLayer){ map.removeLayer(ignLayer); ignLayer=null; } localStorage.removeItem('ignKey'); }; }
-(function initIGN(){ try{ const k=localStorage.getItem('ignKey'); if(k){ if(ignKeyInput) ignKeyInput.value=k; enableIGN(k); } }catch(_){} })();
+      if(eligible.length < 2){
+        reportEl.className = 'status warn';
+        reportEl.textContent = 'Ajoute au moins deux participants éligibles pour évaluer la distance.';
+        detailsEl.textContent = 'Astuce : par défaut, le SDIS est exclu du calcul. Coche l’option si besoin.';
+        return;
+      }
 
-// ——— INSEE overlay (upload)
-let inseeStatus = document.getElementById('inseeStatus');
-const inseeFileEl = document.getElementById('inseeFile');
-if(inseeFileEl){ inseeFileEl.addEventListener('change', async (e)=>{
-  const f=e.target.files[0]; if(!f) return; const txt=await f.text();
-  try{ const gj=JSON.parse(txt);
-    if(inseeLayer){ map.removeLayer(inseeLayer); inseeLayer=null; }
-    function styleFeat(feat){ const p=feat.properties||{}; const z=((p.zone||p.ZONE||p.typologie||p.TYP||'')+'').toLowerCase(); let color='#64748b'; if(z.includes('rur')) color='#16a34a'; else if(z.includes('peri')) color='#b45309'; else if(z.includes('urb')) color='#b91c1c'; return {color, weight:1, fillOpacity:0.05}; }
-    inseeLayer=L.geoJSON(gj,{style:styleFeat}).addTo(map);
-    map.fitBounds(inseeLayer.getBounds().pad(0.2)); if(inseeStatus) inseeStatus.textContent='Grille INSEE chargée.';
-  }catch(err){ alert('GeoJSON INSEE invalide.'); }
-}); }
-const clearInseeBtn = document.getElementById('clearInsee');
-if(clearInseeBtn){ clearInseeBtn.addEventListener('click',()=>{ if(inseeLayer){ map.removeLayer(inseeLayer); inseeLayer=null; } if(inseeStatus) inseeStatus.textContent='Aucune grille INSEE chargée.'; }); }
+      if(mode==='free'){
+        const {lat0, lon0, pts} = projectLocal(eligible.map(p=>({lat:p.lat, lon:p.lon})));
+        const c = mec(pts);
+        const centerLL = unprojectLocal(lat0, lon0, c.x, c.y);
+        const ok = c.r <= rKm + 1e-9;
+        reportEl.className = 'status ' + (ok ? 'ok' : 'bad');
+        reportEl.textContent = (ok ? 'Conforme (centre libre)' : 'Non conforme (centre libre)') +
+          ` — rayon requis: ${c.r.toFixed(2)} km (seuil: ${rKm} km)`;
+        detailsEl.innerHTML = `Centre suggéré: <span class="mono">${centerLL.lat.toFixed(5)}, ${centerLL.lon.toFixed(5)}</span> · Participants couverts: ${eligible.length}`;
+        showAccCircle([centerLL.lat, centerLL.lon], c.r, ok ? '#5dd39e' : '#ff5c7a');
+        return;
+      }
 
- // Self-checks (tests rapides)
- (function runSelfTests(){
-  const out = document.getElementById('selfcheck');
-  try{
-    // Test 1: splitLines CRLF/LF
-    const t1 = splitLines('A\nB\r\nC'); if(!(t1.length===3 && t1[0]==='A' && t1[1]==='B' && t1[2]==='C')) throw new Error('splitLines');
-    // Test 2: regex de split colonnes
-    const parts = 'N;45;2;consumer'.split(/[;,]|\t/); if(parts.length!==4) throw new Error('split colonnes');
-    // Test 3: MEC sur 2 points (diamètre 2 => r=1)
-    const c2 = mec([{x:0,y:0},{x:2,y:0}]); if(Math.abs(c2.r-1)>1e-9) throw new Error('MEC 2 points');
-    // Test 4: MEC sur triangle (0,0),(0,2),(2,0) => centre (1,1), r≈1.414
-    const c3 = mec([{x:0,y:0},{x:0,y:2},{x:2,y:0}]); if(Math.abs(c3.x-1)>1e-6||Math.abs(c3.y-1)>1e-6||Math.abs(c3.r-Math.SQRT2)>1e-6) throw new Error('MEC 3 points');
-    // Test 5: turf.buffer sanity
-    const sqr = turf.polygon([[[0,0],[0,0.01],[0.01,0.01],[0.01,0],[0,0]]]); const buf = turf.buffer(sqr, 1, {units:'kilometers'}); const inside = turf.booleanPointInPolygon(turf.point([0.005,0.005]), buf); if(!inside) throw new Error('buffer/include');
-    try{ localStorage.setItem('__test','ok'); const v=localStorage.getItem('__test'); if(v!=='ok') throw new Error('localStorage'); localStorage.removeItem('__test'); }catch(_){/* ignore private mode */}
-    out.textContent = 'Self-checks : OK';
-  }catch(e){ out.textContent = 'Self-checks : erreur → ' + e.message; console.error(e); }
- })();
-</script>
+      if(mode==='pair'){
+        const {max, pair} = computeMaxDistance(includeSdis);
+        const ok = max <= rKm + 1e-9;
+        reportEl.className = 'status ' + (ok ? 'ok' : 'bad');
+        reportEl.textContent = (ok ? 'Conforme' : 'Non conforme') + ` — distance maximale: ${max.toFixed(2)} km (seuil: ${rKm} km)`;
+        if(pair){
+          const [a,b] = pair;
+          detailsEl.innerHTML = `Participants les plus éloignés: <span class="mono">${a.name}</span> (${humanType(a.type)}) ↔ <span class="mono">${b.name}</span> (${humanType(b.type)}).`;
+        } else {
+          detailsEl.textContent = '';
+        }
+        return;
+      }
+    }
+
+    function setSelected(id){
+      selectedPointId = id;
+      points.forEach(p=>{
+        const el = p.marker.getElement();
+        if(el) el.classList.toggle('selected', p.id===id);
+      });
+    }
+
+    function addPoint(lat, lon, type, name){
+      const id = idSeq++;
+      const label = name || `${humanType(type)} ${id}`;
+      const marker = L.circleMarker([lat, lon], { radius: 7, color: typeColor(type), weight:2, fillColor:typeColor(type), fillOpacity:0.3 }).addTo(map);
+      marker.bindPopup(`
+        <strong>${label}</strong><br>${humanType(type)}<br>
+        <span class="mono">${lat.toFixed(5)}, ${lon.toFixed(5)}</span><br>
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <button data-id="${id}" class="popup-del">Supprimer</button>
+          <button data-id="${id}" class="popup-rename">Renommer</button>
+        </div>
+      `, {autoPan:true});
+      const entry = {id, name:label, lat, lon, type, marker};
+
+      marker.on('click', (e)=>{
+        setSelected(id);
+        if(e.originalEvent && e.originalEvent.altKey){ removePoint(id); return; }
+      });
+      marker.on('contextmenu', ()=>{ removePoint(id); });
+      marker.on('popupopen', e=>{
+        const root = e.popup.getElement();
+        const del = root.querySelector('.popup-del');
+        const ren = root.querySelector('.popup-rename');
+        if(del) del.addEventListener('click', ()=>{ removePoint(id); map.closePopup(); });
+        if(ren) ren.addEventListener('click', ()=>{
+          const nn = prompt('Nouveau nom pour ce point:', entry.name);
+          if(nn && nn.trim()){
+            entry.name = nn.trim();
+            marker.setPopupContent(`
+              <strong>${entry.name}</strong><br>${humanType(entry.type)}<br>
+              <span class="mono">${entry.lat.toFixed(5)}, ${entry.lon.toFixed(5)}</span><br>
+              <div style="margin-top:6px;display:flex;gap:6px;">
+                <button data-id="${id}" class="popup-del">Supprimer</button>
+                <button data-id="${id}" class="popup-rename">Renommer</button>
+              </div>
+            `);
+          }
+        });
+      });
+
+      points.push(entry);
+      updateCount(); refreshCircles(); refreshReport();
+    }
+
+    function removePoint(id){
+      const idx = points.findIndex(p=>p.id===id);
+      if(idx>=0){
+        map.removeLayer(points[idx].marker);
+        points.splice(idx,1);
+        if(selectedPointId===id) selectedPointId=null;
+        updateCount(); refreshCircles(); refreshReport();
+      }
+    }
+
+    // --- Map click add ---
+    map.on('click', (e)=>{ addPoint(e.latlng.lat, e.latlng.lng, selectedType()); });
+
+    // --- Keyboard delete ---
+    window.addEventListener('keydown', (e)=>{
+      if((e.key==='Delete' || e.key==='Backspace') && selectedPointId!=null){ e.preventDefault(); removePoint(selectedPointId); }
+    });
+
+    // --- Controls ---
+    document.getElementById('clearAll').addEventListener('click', ()=>{
+      points.forEach(p=>map.removeLayer(p.marker)); points.length = 0;
+      clearCircles(); clearAccCircle(); setSelected(null); updateCount(); refreshReport();
+    });
+    document.getElementById('fitBtn').addEventListener('click', fitToData);
+
+    document.getElementById('importBtn').addEventListener('click', ()=>{
+      const raw = document.getElementById('importArea').value.trim(); if(!raw) return;
+      const lines = raw.split(/\r?\n/); let ok=0, fail=0;
+      lines.forEach(line=>{
+        if(!line.trim()) return;
+        const parts = line.split(';').map(s=>s.trim());
+        if(parts.length < 4){ fail++; return; }
+        const [name, latS, lonS, typeS] = parts;
+        const lat = parseFloat(latS), lon = parseFloat(lonS);
+        let t = (typeS||'').toLowerCase();
+        if(['consumer','consommateur','cons'].includes(t)) t='consumer';
+        else if(['producer','producteur','prod'].includes(t)) t='producer';
+        else if(['sdis'].includes(t)) t='sdis';
+        else { fail++; return; }
+        if(isNaN(lat) || isNaN(lon) || lat<-90 || lat>90 || lon<-180 || lon>180){ fail++; return; }
+        addPoint(lat, lon, t, name); ok++;
+      });
+      if(ok){ fitToData(); }
+      if(fail){ detailsEl.innerHTML = `Import: ${ok} ligne(s) ajoutée(s), ${fail} rejetée(s). <span class="hint">Format attendu: <span class="mono">Nom;Lat;Lon;Type</span></span>`; }
+    });
+
+    document.getElementById('exportCsv').addEventListener('click', ()=>{
+      if(points.length===0) return;
+      const header = 'name;lat;lon;type';
+      const rows = points.map(p=>[p.name.replace(/;/g, ','), p.lat.toFixed(6), p.lon.toFixed(6), p.type].join(';'));
+      const csv = [header, ...rows].join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'acc_etendue_points.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    // Emprise import
+    document.getElementById('empriseFile').addEventListener('change', async (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      const txt = await f.text();
+      try{
+        const gj = JSON.parse(txt);
+        // Sanity: Polygon/MultiPolygon
+        let ok = false;
+        L.geoJSON(gj, {
+          onEachFeature: (feat)=>{ if(['Polygon','MultiPolygon'].includes(feat.geometry.type)) ok = true; }
+        });
+        if(!ok){ alert('Le GeoJSON doit contenir un Polygon ou MultiPolygon (EPSG:4326).'); return; }
+        loadEmpriseGeoJSON(gj);
+      }catch(err){
+        alert('GeoJSON invalide.');
+      }
+    });
+    document.getElementById('clearEmprise').addEventListener('click', ()=>{ clearEmprise(); refreshReport(); });
+
+    // INSEE overlay
+    async function toggleInsee(){
+      if(inseeLayer){
+        if(inseeVisible){ map.removeLayer(inseeLayer); inseeVisible=false; }
+        else { inseeLayer.addTo(map); inseeVisible=true; }
+        return;
+      }
+      try{
+        const resp = await fetch('./data/insee_grille.geojson');
+        if(!resp.ok) throw new Error('Fichier introuvable');
+        const data = await resp.json();
+        inseeLayer = L.geoJSON(data, {
+          style: f => {
+            // Attendu: f.properties.zone = 'rurale'|'periurbaine'|'urbaine' (à adapter selon ton fichier)
+            const z = (f.properties?.zone||'').toLowerCase();
+            let color = '#8888ff'; // défaut
+            if(z.includes('rural')) color = '#5dd39e';
+            else if(z.includes('peri')) color = '#ffb020';
+            else if(z.includes('urb')) color = '#ff5c7a';
+            return {color, weight:1, fillOpacity:0.05};
+          }
+        }).addTo(map);
+        inseeVisible = true;
+      }catch(e){
+        alert('Impossible de charger /data/insee_grille.geojson. Place le fichier et réessaie.');
+      }
+    }
+    document.getElementById('toggleInsee').addEventListener('click', toggleInsee);
+
+    // IGN activation
+    document.getElementById('useIgn').addEventListener('click', ()=>{
+      const key = ignKeyEl.value.trim();
+      if(!key){ alert('Renseigne ta clé API IGN Geoportail.'); return; }
+      if(ignLayer) map.removeLayer(ignLayer);
+      // Plan IGN V2 (WMTS)
+      ignLayer = L.tileLayer(`https://wxs.ign.fr/${key}/geoportail/wmts?layer=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix={z}&TileCol={x}&TileRow={y}`, {
+        maxZoom: 19, attribution: '© IGN - Géoportail'
+      });
+      ignLayer.addTo(map);
+    });
+
+    // Export image
+    document.getElementById('printMap').addEventListener('click', ()=>{ printer.printMap('A4Landscape', 'acc_etendue_carte'); });
+
+    // React to parameter changes
+    document.querySelectorAll('input[name="radius"]').forEach(r=>{ r.addEventListener('change', ()=>{ refreshCircles(); refreshReport(); }); });
+    customRadiusEl.addEventListener('input', ()=>{ refreshCircles(); refreshReport(); });
+    showCirclesEl.addEventListener('change', ()=>{ refreshCircles(); });
+    includeSdisEl.addEventListener('change', ()=>{ refreshReport(); });
+    [modeFreeEl, modeEmpriseEl, modePairEl].forEach(el=> el.addEventListener('change', ()=>{ refreshReport(); }));
+
+    // Seed example (commenté)
+    // addPoint(45.1885, 5.7245, 'consumer', 'Site client Grenoble');
+    // addPoint(45.2800, 5.8830, 'producer', 'Centrale PV Voiron');
+    // fitToData();
+  </script>
 </body>
 </html>
