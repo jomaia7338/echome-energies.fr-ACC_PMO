@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zone": "rurale" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[5.7,45.2],[5.9,45.2],[5.9,45.4],[5.7,45.4],[5.7,45.2]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "periurbaine" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[5.5,45.3],[5.6,45.3],[5.6,45.4],[5.5,45.4],[5.5,45.3]]]
+      }
+    }
+  ]
+}
