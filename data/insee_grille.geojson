@@ -1,19 +1,6 @@
 {
   "type": "FeatureCollection",
-  "name": "insee_grille_demo",
   "features": [
-    {
-      "type": "Feature",
-      "properties": {
-        "code_commune": "38121",
-        "nom": "Livet-et-Gavet",
-        "zone": "rurale"
-      },
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [[[5.725,45.06],[5.865,45.06],[5.865,45.18],[5.725,45.18],[5.725,45.06]]]
-      }
-    },
     {
       "type": "Feature",
       "properties": {
@@ -23,19 +10,7 @@
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[5.65,45.14],[5.78,45.14],[5.78,45.25],[5.65,45.25],[5.65,45.14]]]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "code_commune": "38229",
-        "nom": "Meylan",
-        "zone": "periurbaine"
-      },
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [[[5.74,45.20],[5.80,45.20],[5.80,45.24],[5.74,45.24],[5.74,45.20]]]
+        "coordinates": [[[5.69,45.17],[5.71,45.17],[5.71,45.19],[5.69,45.19],[5.69,45.17]]]
       }
     }
   ]
