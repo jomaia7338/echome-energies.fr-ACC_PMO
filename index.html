@@ -33,20 +33,23 @@
         <option value="consommateur">Consommateur</option>
         <option value="sdis">SDIS</option>
       </select>
+      <select id="radiusSelect">
+        <option value="2000">Zone 2 km</option>
+        <option value="10000" selected>Zone 10 km</option>
+        <option value="20000">Zone 20 km</option>
+      </select>
     </fieldset>
 
     <fieldset>
       <legend>Cartes & données</legend>
-      <div class="hint">Fonds: OSM, IGN (clé optionnelle). Overlay INSEE.</div>
       <div class="row">
-        <input id="ignKey" type="text" placeholder="Clé API IGN Géoportail (optionnel)">
+        <input id="ignKey" type="text" placeholder="Clé IGN (optionnel)">
         <button id="useIgn" class="btn">Activer IGN</button>
       </div>
       <div class="row">
         <button id="toggleInsee" class="btn">Afficher grille INSEE</button>
         <button id="printMap" class="btn">Exporter image</button>
       </div>
-      <div class="hint">Place le fichier ici : <span class="mono">/data/insee_grille.geojson</span></div>
     </fieldset>
 
     <fieldset>
@@ -54,7 +57,6 @@
       <button class="btn" onclick="clearPoints()">Effacer points</button>
     </fieldset>
   </div>
-
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
@@ -77,32 +79,47 @@
     let pointsLayer = L.layerGroup().addTo(map);
     let inseeLayer = null;
     let inseeVisible = false;
+    let producteurCircle = null;
+    let producteurCenter = null;
 
     function selectedType() {
       return document.getElementById('pointType').value;
+    }
+
+    function selectedRadius() {
+      return parseInt(document.getElementById('radiusSelect').value);
     }
 
     function addPoint(lat, lng, type) {
       const colors = {
         producteur: 'green',
         consommateur: 'blue',
-        sdis: 'red'
+        sdis: 'red',
+        horsZone: '#999'
       };
-      const marker = L.circleMarker([lat, lng], {
-        radius: 8,
-        color: colors[type] || 'black',
-        fillOpacity: 0.6
-      }).bindPopup(`${type} (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
-      marker.addTo(pointsLayer);
 
       if (type === 'producteur') {
-        const circle = L.circle([lat, lng], {
-          radius: 10000,
+        producteurCenter = L.latLng(lat, lng);
+        if (producteurCircle) map.removeLayer(producteurCircle);
+        producteurCircle = L.circle(producteurCenter, {
+          radius: selectedRadius(),
           color: 'green',
           fillOpacity: 0.1
-        }).bindPopup("Périmètre 10 km");
-        circle.addTo(pointsLayer);
+        }).bindPopup(`Zone ${selectedRadius() / 1000} km`).addTo(map);
       }
+
+      let eligible = true;
+      if (producteurCenter && type !== 'producteur') {
+        const dist = producteurCenter.distanceTo([lat, lng]);
+        eligible = dist <= selectedRadius();
+      }
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 8,
+        color: eligible ? colors[type] : colors.horsZone,
+        fillOpacity: 0.6
+      }).bindPopup(`${type} (${lat.toFixed(5)}, ${lng.toFixed(5)})<br>${eligible ? "✅ Éligible PMO" : "❌ Hors périmètre"}`);
+      marker.addTo(pointsLayer);
     }
 
     map.on('click', e => {
@@ -111,6 +128,9 @@
 
     function clearPoints() {
       pointsLayer.clearLayers();
+      if (producteurCircle) map.removeLayer(producteurCircle);
+      producteurCircle = null;
+      producteurCenter = null;
     }
 
     async function toggleInsee() {
