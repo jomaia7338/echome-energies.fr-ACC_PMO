@@ -4,108 +4,88 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ACC – Vérification d’éligibilité (centre libre · 2/10/20 km)</title>
-  <!-- Leaflet CSS + fallback -->
+  <!-- Leaflet CSS (+ fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!-- Fonts (charte Echome) -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
     body{margin:0;font-family:'Open Sans', system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;color:var(--ink);background:#fff}
-    header{padding:12px;border-bottom:1px solid var(--line)}
-    header h1{margin:0 0 6px 0;font-size:18px;font-family:'Montserrat',sans-serif;letter-spacing:.2px;color:var(--ink)}
-    .topbar{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-bottom:8px}
-    .toolbar{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:8px}
-    .tool{background:var(--muted);border:1px solid var(--line);border-radius:10px;padding:10px}
-    .tool label{font-size:12px;color:#475569;display:block;margin-bottom:6px}
-    .tool .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-    .btn{padding:8px 12px;border:1px solid var(--brand);border-radius:10px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700;box-shadow:0 1px 0 rgba(0,0,0,.03)}
-    .btn:hover{background:#2ea996;border-color:#2ea996}
-    #status{margin:10px 12px 0;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;font-size:14px}
+    /* Header ultra-compact */
+    header.slim{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:6px 8px}
+    .brand{display:flex;align-items:center;gap:8px}
+    .brand svg{height:26px;width:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+    .brand .name{font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:.3px}
+    .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between;width:100%}
+    .group{display:flex;align-items:center;gap:8px}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#fff}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .prod{background:#6D28D9}.cons{background:#2e86de}.sdis{background:#E10600}
+    .btn{padding:6px 8px;border:1px solid var(--brand);border-radius:10px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700}
+    .btn.icon{padding:6px 8px;min-width:36px;display:inline-flex;align-items:center;justify-content:center}
+    .btn.secondary{background:#fff;color:#0f4f47;border-color:var(--brand)}
+    select, input[type="number"], input[type="text"]{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+    #status{margin:6px 8px 0;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;font-size:14px}
     #status.ok{background:rgba(55,195,175,.08);border-color:rgba(55,195,175,.45);color:#116a60}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
-    #map{min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
-    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-    .prod{background:#6D28D9}.cons{background:#2e86de}.sdis{background:#E10600}
+    #map{min-height:420px;margin:8px;border:1px solid var(--line);border-radius:12px}
+    /* Drawer options avancées */
+    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:330px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
+    #drawer.open{transform:none}
+    #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
+    #drawer h2{font-family:'Montserrat',sans-serif;font-size:16px;margin:0}
+    #drawer .content{padding:12px;overflow:auto}
+    fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0;padding:10px}
+    legend{padding:0 6px;color:#475569;font-size:12px}
+    textarea{width:100%;min-height:80px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:8px}
     .small{font-size:12px;color:#64748b}
-    .pill{display:inline-block;border:1px solid var(--brand);border-radius:999px;padding:2px 8px;font-size:12px;background:#fff;color:var(--brand)}
     #searchResults ul{margin:6px 0 0 16px;padding:0}
     #searchResults li{margin:2px 0}
     #searchResults a{text-decoration:none;border-bottom:1px dashed #999;color:#111}
-    rand header */
-    .brand{display:flex;align-items:center;gap:10px;margin:4px 0 6px}
-    .brand svg{height:32px;width:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
-    .brand .brand-text{font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:.3px;color:var(--ink)}
+    #searchResults a:hover{color:#000}
+    @media (max-width: 720px){ header.slim{flex-wrap:wrap} .controls{gap:6px} }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand" role="img" arÉnergies">
+  <!-- BARRE ULTRA-COMPACTE -->
+  <header class="slim">
+    <div class="brand" role="img" aria-label="Echome Énergies">
       <svg viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
         <text x="60" y="19" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="14" fill="#ffffff">ECHOME</text>
       </svg>
-      <span class="brand-text">Echome Énergies</span>
+      <span class="name">Echome Énergies</span>
     </div>
-    <h1>ACC – Vérification d’éligibilité (centre libre)</h1>
-    <div class="topbar">
-      <button id="toggleBar" class="btn" title="Réduire/agrandir la barre">↕ Réduire la barre</button>
-      <button id="toggleAdvanced" class="btn" title="Afficher/masquer les options avancées">Options avancées</button>
-    </div>
-    <div class="toolbar">
-      <div class="tool">
-        <label>1) Ajouter des points (clic carte) — choisir le type :</label>
-        <div class="row">
-          <label><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Consommateur</label>
-          <label><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Producteur</label>
-          <label><input type="radio" name="ptype" value="sdis"> <span class="dot sdis"></span>SDIS</label>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button id="clearBtn" class="btn">Effacer tous les points</button>
-          <button id="fitBtn" class="btn">Ajuster la vue</button>
-          <button id="locateBtn" class="btn">📍 Me localiser</button>
-          <button id="resetDefaultBtn" class="btn">Réinitialiser défaut</button>
-        </div>
-        <div id="count" class="small" style="margin-top:6px">Aucun point.</div>
+
+    <div class="controls">
+      <!-- Types de points -->
+      <div class="group" role="radiogroup" aria-label="Type de point">
+        <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
+        <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
+        <label class="chip"><input type="radio" name="ptype" value="sdis"> <span class="dot sdis"></span>SDIS</label>
       </div>
 
-      <div class="tool">
-        <label>2) Limite réglementaire (R)</label>
-        <div class="row">
-          <label><input type="radio" name="limit" value="2"> 2 km</label>
-          <label><input type="radio" name="limit" value="10"> 10 km</label>
-          <label><input type="radio" name="limit" value="20" checked> 20 km</label>
-        </div>
-        <div class="row" style="margin-top:6px">
-          <label><input type="radio" name="limit" value="custom"> Perso :</label>
-          <input id="customKm" type="number" min="0" step="0.1" style="width:110px" placeholder="km">
-        </div>
-        <div class="row" style="margin-top:6px">
-          <label><input id="includeSdis" type="checkbox"> Inclure SDIS (option)</label>
-        </div>
-        <div class="small">Mesure pédagogique : on montre un <strong>cercle de rayon R</strong> au <strong>centre libre</strong>. La conformité officielle s’apprécie par la <strong>distance max</strong> entre deux participants éligibles.</div>
+      <!-- Limite R -->
+      <div class="group">
+        <label class="small">R :</label>
+        <select id="limitSel">
+          <option value="2">2 km</option>
+          <option value="10">10 km</option>
+          <option value="20" selected>20 km</option>
+          <option value="custom">Perso</option>
+        </select>
+        <input id="customKm" type="number" min="0" step="0.1" placeholder="km" style="width:90px;display:none">
+        <label class="small"><input id="includeSdis" type="checkbox"> Inclure SDIS</label>
       </div>
 
-      <div class="tool advanced">
-        <label>3) Import rapide (Nom;Lat;Lon;Type)</label>
-        <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer" style="width:100%;min-height:70px"></textarea>
-        <div class="row" style="margin-top:6px"><button id="importBtn" class="btn">Importer</button></div>
-        <div class="small">Types acceptés : consumer / producer / sdis</div>
-      </div>
-
-      <div class="tool advanced">
-        <label>4) Export</label>
-        <div class="row"><button id="exportCsvBtn" class="btn">Exporter CSV</button></div>
-        <div class="small" style="margin-top:6px">CSV séparateur « ; » (Excel FR), lat/lon en WGS84</div>
-      </div>
-
-      <div class="tool advanced">
-        <label>5) Rechercher une adresse</label>
-        <div class="row">
-          <input id="searchQ" type="text" placeholder="Adresse, commune, code postal" style="flex:1;min-width:200px">
-          <button id="searchBtn" class="btn">Rechercher</button>
-        </div>
-        <div id="searchResults" class="small" aria-live="polite"></div>
-        <div class="small" style="margin-top:6px">Géocodage : <span class="pill">Photon/OSM</span> avec repli <span class="pill">Nominatim</span>. Cliquer un résultat = ajouter un point du <em>type sélectionné</em>.</div>
+      <!-- Actions rapides -->
+      <div class="group">
+        <button id="locateBtn" class="btn icon" title="Me localiser">📍</button>
+        <button id="fitBtn" class="btn icon" title="Ajuster la vue">🗺️</button>
+        <button id="clearBtn" class="btn icon" title="Effacer tous les points">🗑️</button>
+        <button id="gearBtn" class="btn secondary" title="Options avancées">⚙️ Options</button>
       </div>
     </div>
   </header>
@@ -113,30 +93,61 @@
   <div id="status">Initialisation…</div>
   <div id="map" aria-label="Carte interactive"></div>
 
+  <!-- Drawer (options avancées) -->
+  <aside id="drawer" aria-hidden="true" aria-label="Options avancées">
+    <header>
+      <h2>Options avancées</h2>
+      <button id="drawerClose" class="btn secondary">Fermer</button>
+    </header>
+    <div class="content">
+      <fieldset>
+        <legend>Import rapide</legend>
+        <div class="small">Format : <span class="small">Nom;Lat;Lon;Type</span> — Types : consumer / producer / sdis</div>
+        <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer"></textarea>
+        <div style="margin-top:8px"><button id="importBtn" class="btn">Importer</button></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Export</legend>
+        <div><button id="exportCsvBtn" class="btn">Exporter CSV</button></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Rechercher une adresse</legend>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="searchQ" type="text" placeholder="Adresse, commune, code postal" style="flex:1">
+          <button id="searchBtn" class="btn">Rechercher</button>
+        </div>
+        <div id="searchResults" class="small" aria-live="polite" style="margin-top:6px"></div>
+        <div class="small" style="margin-top:6px">Géocodage : Photon OSM → repli Nominatim.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Producteur par défaut</legend>
+        <div class="small">Adresse par défaut : <em>210 Les Espinasses, 38250 Villard-de-Lans</em></div>
+        <div style="margin-top:6px"><button id="resetDefaultBtn" class="btn secondary">Réinitialiser le défaut</button></div>
+      </fieldset>
+
+      <div class="small" style="margin-top:10px">Points : <span id="count">Aucun point.</span></div>
+    </div>
+  </aside>
+
   <!-- Leaflet JS (principal) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <script>
-    // Si Leaflet ne charge pas (unpkg bloqué), on bascule automatiquement sur cdnjs
-    (function ensureLeaflet(cb){
-      if(window.L){ cb(); return; }
-      var s=document.createElement('script');
-      s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
-      s.crossOrigin='anonymous'; s.referrerPolicy='no-referrer';
-      s.onload=cb; s.onerror=function(){ document.getElementById('status').textContent='Erreur : Leaflet bloqué par le réseau.'; };
-      document.head.appendChild(s);
-    })(initApp);
+    // Fallback si unpkg bloqué
+    (function ensureLeaflet(cb){ if(window.L){ cb(); return; } var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'; s.crossOrigin='anonymous'; s.referrerPolicy='no-referrer'; s.onload=cb; s.onerror=function(){ document.getElementById('status').textContent='Erreur : Leaflet bloqué par le réseau.'; }; document.head.appendChild(s); })(initApp);
 
     function initApp(){
       const statusEl = document.getElementById('status');
       const mapEl = document.getElementById('map');
       // Helpers
-      const eps = 1e-9;
-      const toRad = d => d*Math.PI/180;
+      const eps = 1e-9; const toRad = d => d*Math.PI/180;
       function haversineKm(a,b){ const R=6371; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng); const lat1=toRad(a.lat), lat2=toRad(b.lat); const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
       function splitLines(t){ return (t||'').split(/\r?\n/); }
       function esc(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-      // MEC utilitaires
+      // MEC utils
       function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length; const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32, ref:p})); return {lat0,lon0,P}; }
       function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
       function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
@@ -152,43 +163,45 @@
       osm.on('tileerror', ()=>{ if(!map.hasLayer(carto)) carto.addTo(map); if(map.hasLayer(osm)) map.removeLayer(osm); statusEl.textContent='Fond OSM bloqué → bascule vers Carto Light.'; });
       osm.addTo(map);
       L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
-      function layout(){ const H=document.querySelector('header'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height = h + 'px'; try{ map.invalidateSize(); }catch(_){ } }
-      window.addEventListener('resize', layout);
-      setTimeout(layout, 50);
+      function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height = h + 'px'; try{ map.invalidateSize(); }catch(_){ } }
+      window.addEventListener('resize', layout); setTimeout(layout, 50);
 
       // État
       const participants=[]; let uid=0; let accCircle=null; let accCenterMarker=null;
       const colors={producer:'#6D28D9', consumer:'#2e86de', sdis:'#E10600'};
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
       function includeSdis(){ return document.getElementById('includeSdis').checked; }
-      function currentLimit(){ const sel=document.querySelector('input[name="limit"]:checked').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
-      function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
+      function currentLimit(){ const sel=document.getElementById('limitSel').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
+      function updateCount(){ const c=document.getElementById('count'); if(!c) return; const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
 
       function addPoint(lat,lng,type,name){ const id=++uid; const label=name||`${type} ${id}`; const m=L.circleMarker([lat,lng],{radius:7,color:colors[type]||'#333',weight:2,fillColor:colors[type]||'#333',fillOpacity:0.3}).addTo(map); const entry={id,name:label,type,lat,lng,marker:m}; m.bindTooltip(`${label} (${type})`);
         const defaultBtnHtml = type==='producer' ? `<button class="btn" data-act="makedef" data-id="${id}">Définir comme producteur par défaut</button>` : '';
-        m.bindPopup(`<strong>${label}</strong><br>${type}<br><div class="row" style="margin-top:6px"><button class="btn" data-act="rename" data-id="${id}">Renommer</button><button class="btn" data-act="delete" data-id="${id}">Supprimer</button>${defaultBtnHtml}</div>`);
-        m.on('popupopen', e=>{ const root=e.popup.getElement(); const ren=root.querySelector('button[data-act="rename"][data-id="'+id+'"]'); const del=root.querySelector('button[data-act="delete"][data-id="'+id+'"]'); const def=root.querySelector('button[data-act="makedef"][data-id="'+id+'"]'); if(ren) ren.addEventListener('click', ()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); m.setPopupContent(`<strong>${entry.name}</strong><br>${entry.type}<br><div class=\"row\" style=\"margin-top:6px\"><button class=\"btn\" data-act=\"rename\" data-id=\"${id}\">Renommer</button><button class=\"btn\" data-act=\"delete\" data-id=\"${id}\">Supprimer</button>${defaultBtnHtml}</div>`); m.bindTooltip(`${entry.name} (${entry.type})`);} }); if(del) del.addEventListener('click', ()=> removePoint(id)); if(def) def.addEventListener('click', ()=>{ try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:entry.lat,lng:entry.lng,name:entry.name||'Producteur'})); statusEl.className=''; statusEl.textContent='Producteur par défaut enregistré.'; }catch(_){ } }); });
+        m.bindPopup(`<strong>${label}</strong><br>${type}<br><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn secondary" data-act="rename" data-id="${id}">Renommer</button><button class="btn secondary" data-act="delete" data-id="${id}">Supprimer</button>${defaultBtnHtml}</div>`);
+        m.on('popupopen', e=>{ const root=e.popup.getElement(); const ren=root.querySelector('button[data-act="rename"][data-id="'+id+'"]'); const del=root.querySelector('button[data-act="delete"][data-id="'+id+'"]'); const def=root.querySelector('button[data-act="makedef"][data-id="'+id+'"]'); if(ren) ren.addEventListener('click', ()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); m.setPopupContent(`<strong>${entry.name}</strong><br>${entry.type}<br><div style=\"margin-top:6px;display:flex;gap:6px;flex-wrap:wrap\"><button class=\"btn secondary\" data-act=\"rename\" data-id=\"${id}\">Renommer</button><button class=\"btn secondary\" data-act=\"delete\" data-id=\"${id}\">Supprimer</button>${defaultBtnHtml}</div>`); m.bindTooltip(`${entry.name} (${entry.type})`);} }); if(del) del.addEventListener('click', ()=> removePoint(id)); if(def) def.addEventListener('click', ()=>{ try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:entry.lat,lng:entry.lng,name:entry.name||'Producteur'})); statusEl.className=''; statusEl.textContent='Producteur par défaut enregistré.'; }catch(_){ } }); });
         m.on('contextmenu', ()=> removePoint(id)); participants.push(entry); refreshACC(); }
       function removePoint(id){ const i=participants.findIndex(p=>p.id===id); if(i>-1){ map.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); } }
       map.on('click', e=> addPoint(e.latlng.lat, e.latlng.lng, selectedType()));
 
       function clearAccCircle(){ if(accCircle){map.removeLayer(accCircle); accCircle=null;} if(accCenterMarker){map.removeLayer(accCenterMarker); accCenterMarker=null;} }
       function styleInsideOutside(center, limitKm, eligible){ eligible.forEach(p=>{ const d = haversineKm(center, {lat:p.lat,lng:p.lng}); const inside = d <= limitKm + eps; p.marker.setStyle({ color: colors[p.type]||'#333', weight: inside? 3 : 2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.5:0.15, opacity:1 }); }); }
-      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:currentLimit()*1000,color:'#6D28D9',weight:3,fill:false,opacity:0.95}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#6D28D9',weight:2,fillOpacity:0.7}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
+      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:currentLimit()*1000,color:'#6D28D9',weight:3,fill:false,opacity:0.95}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#6D28D9',weight:2,fillOpacity:0.7}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Centre libre trouvé : cercle de rayon <strong>${limit} km</strong> englobe tous les participants éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
 
-      // UI
-      document.getElementById('toggleBar').onclick = ()=>{ document.body.classList.toggle('compact'); layout(); };
-      document.getElementById('toggleAdvanced').onclick = ()=>{ document.body.classList.toggle('show-advanced'); layout(); };
+      // UI — micro-barre
+      document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display = (v==='custom')?'inline-block':'none'; refreshACC(); });
+      document.getElementById('customKm').addEventListener('input', refreshACC);
+      document.getElementById('includeSdis').addEventListener('change', refreshACC);
       document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removePoint(p.id)); };
       document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
-      Array.from(document.getElementsByName('limit')).forEach(r=> r.addEventListener('change', refreshACC));
-      document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked) refreshACC(); });
-      document.getElementById('includeSdis').addEventListener('change', refreshACC);
 
-      // Localisation utilisateur (épingle verte)
+      // Localisation (épingle verte)
       let myMarker=null, myAccCircle=null; function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée par ce navigateur.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); const myIcon=L.divIcon({className:'myloc-pin', html:`<svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/><circle cx="16" cy="12" r="5" fill="#34D399"/></svg>`, iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-28]}); myMarker=L.marker([lat,lng],{icon:myIcon,zIndexOffset:1000}).addTo(map).bindTooltip('Vous êtes ici'); myAccCircle=L.circle([lat,lng],{radius:acc,color:'#34D399',weight:1,opacity:0.5,fillOpacity:0.06}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
-      const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
+      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); const myIcon=L.divIcon({className:'myloc-pin', html:`<svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/><circle cx="16" cy="12" r="5" fill="#34D399"/></svg>`, iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-28]}); myMarker=L.marker([lat,lng],{icon:myIcon,zIndexOffset:1000}).addTo(map).bindTooltip('Vous êtes ici'); myAccCircle=L.circle([lat,lng],{radius:acc,color:'#34D399',weight:1,opacity:0.5,fillOpacity:0.06}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
+      document.getElementById('locateBtn').addEventListener('click', locateMe);
+
+      // Drawer (options avancées)
+      const drawer = document.getElementById('drawer');
+      document.getElementById('gearBtn').onclick = ()=>{ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); };
+      document.getElementById('drawerClose').onclick = ()=>{ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); };
 
       // Géocodage (Photon → Nominatim)
       async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1], lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label || p.name || q, lat, lng}; }).filter(Boolean); }
@@ -213,11 +226,10 @@
 
       // Lancer
       try{ initDefaultProducer(); }catch(_){ }
-      document.body.classList.add('compact');
       layout();
       statusEl.className=''; statusEl.textContent='Prêt.';
 
-      // Diag visibles
+      // Diagnostics visibles
       window.addEventListener('error', e=>{ statusEl.className=''; statusEl.textContent='Erreur JS : '+e.message; });
       window.addEventListener('unhandledrejection', e=>{ statusEl.className=''; statusEl.textContent='Erreur Promesse : '+(e.reason?.message||e.reason); });
     }
