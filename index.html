@@ -44,6 +44,7 @@
         <div class="row" style="margin-top:8px">
           <button id="clearBtn" class="btn">Effacer tous les points</button>
           <button id="fitBtn" class="btn">Ajuster la vue</button>
+          <button id="locateBtn" class="btn">📍 Me localiser</button>
         </div>
         <div id="count" class="small" style="margin-top:6px">Aucun point.</div>
       </div>
@@ -126,7 +127,22 @@
     const map = L.map('map', { zoomControl: true }).setView([46.6, 2.0], 6);
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
-    setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){} }, 100);
+    setTimeout(()=>{ try{ map.invalidateSize();
+
+    // ——— Géolocalisation utilisateur (optionnelle)
+    let myMarker=null, myAccCircle=null;
+    function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
+    function locateMe(){
+      if(!navigator.geolocation){ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation non supportée par ce navigateur.'; return; }
+      map.locate({setView:true, maxZoom:15, enableHighAccuracy:true});
+    }
+    map.on('locationfound', e=>{
+      clearMyLoc();
+      myMarker=L.circleMarker(e.latlng,{radius:7,color:'#111827',weight:2,fillColor:'#111827',fillOpacity:0.4}).addTo(map).bindTooltip('Vous êtes ici');
+      myAccCircle=L.circle(e.latlng,{radius:e.accuracy||50,color:'#111827',weight:1,opacity:0.4,fillOpacity:0.05}).addTo(map);
+      const s=document.getElementById('status'); s.className=''; s.textContent=`Localisé (~±${Math.round(e.accuracy||50)} m).`;
+    });
+    map.on('locationerror', e=>{ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation indisponible (autorisation refusée ?).'; }); }catch(_){} }, 100);
 
     // ——— État
     const participants=[]; // {id,name,type,lat,lng,marker}
@@ -143,6 +159,34 @@
       const id=++uid; const label=name||`${type} ${id}`;
       const m=L.circleMarker([lat,lng],{radius:7,color:colors[type]||'#333',weight:2,fillColor:colors[type]||'#333',fillOpacity:0.3}).addTo(map);
       m.bindTooltip(`${label} (${type})`);
+      m.bindPopup(`
+        <strong>${label}</strong><br>${type}<br>
+        <div class="row" style="margin-top:6px">
+          <button class="btn" data-act="rename" data-id="${id}">Renommer</button>
+          <button class="btn" data-act="delete" data-id="${id}">Supprimer</button>
+        </div>
+      `);
+      m.on('popupopen', e=>{
+        const root=e.popup.getElement();
+        const ren=root.querySelector('button[data-act="rename"][data-id="'+id+'"]');
+        const del=root.querySelector('button[data-act="delete"][data-id="'+id+'"]');
+        if(ren) ren.addEventListener('click', ()=>{
+          const entry=participants.find(p=>p.id===id); if(!entry) return;
+          const nn=prompt('Nouveau nom :', entry.name||'');
+          if(nn && nn.trim()){
+            entry.name=nn.trim();
+            m.setPopupContent(`
+              <strong>${entry.name}</strong><br>${entry.type}<br>
+              <div class=\"row\" style=\"margin-top:6px\">
+                <button class=\"btn\" data-act=\"rename\" data-id=\"${id}\">Renommer</button>
+                <button class=\"btn\" data-act=\"delete\" data-id=\"${id}\">Supprimer</button>
+              </div>
+            `);
+            m.bindTooltip(`${entry.name} (${entry.type})`);
+          }
+        });
+        if(del) del.addEventListener('click', ()=> removePoint(id));
+      });
       m.on('contextmenu', ()=> removePoint(id));
       participants.push({id,name:label,type,lat,lng,marker:m});
       refreshACC();
@@ -196,6 +240,7 @@
     Array.from(document.getElementsByName('limit')).forEach(r=> r.addEventListener('change', refreshACC));
     document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked) refreshACC(); });
     document.getElementById('includeSdis').addEventListener('change', refreshACC);
+    const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
 
     document.getElementById('importBtn').onclick = ()=>{
       const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return;
