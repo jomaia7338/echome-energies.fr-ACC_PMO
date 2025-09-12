@@ -24,7 +24,7 @@
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
     #map{height:calc(100svh - 250px);min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-    .prod{background:#f1c40f}.cons{background:#2e86de}.sdis{background:#9b59b6}
+    .prod{background:#FFD100}.cons{background:#2e86de}.sdis{background:#E10600}
     .small{font-size:12px;color:#64748b}
     .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 6px;font-size:12px;background:#fff}
     #searchResults ul{margin:6px 0 0 16px;padding:0}
@@ -140,7 +140,7 @@
 
       // — État
       const participants=[]; let uid=0; let accCircle=null; let accCenterMarker=null;
-      const colors={producer:'#f1c40f', consumer:'#2e86de', sdis:'#9b59b6'};
+      const colors={producer:'#FFD100', consumer:'#2e86de', sdis:'#E10600'};
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
       function includeSdis(){ return document.getElementById('includeSdis').checked; }
       function currentLimit(){ const sel=document.querySelector('input[name="limit"]:checked').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
@@ -155,8 +155,20 @@
       map.on('click', e=> addPoint(e.latlng.lat, e.latlng.lng, selectedType()));
 
       function clearAccCircle(){ if(accCircle){map.removeLayer(accCircle); accCircle=null;} if(accCenterMarker){map.removeLayer(accCenterMarker); accCenterMarker=null;} }
-      function styleInsideOutside(center, limitKm, eligible){ eligible.forEach(p=>{ const d = haversineKm(center, {lat:p.lat,lng:p.lng}); const inside = d <= limitKm + eps; p.marker.setStyle({ color: inside? '#15803d' : '#b91c1c', weight:2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.35:0.15 }); }); }
-      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:limit*1000,color:'#111827',weight:2,fill:false,opacity:0.85}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#111827',weight:2,fillOpacity:0.6}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
+      function styleInsideOutside(center, limitKm, eligible){
+      eligible.forEach(p=>{
+        const d = haversineKm(center, {lat:p.lat,lng:p.lng});
+        const inside = d <= limitKm + eps;
+        p.marker.setStyle({
+          color: colors[p.type]||'#333',
+          weight: inside? 3 : 2,
+          fillColor: colors[p.type]||'#333',
+          fillOpacity: inside? 0.5 : 0.15,
+          opacity: 1
+        });
+      });
+    }); const inside = d <= limitKm + eps; p.marker.setStyle({ color: inside? '#15803d' : '#b91c1c', weight:2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.35:0.15 }); }); }
+      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:limit*1000,color:'#FFD100',weight:2,fill:false,opacity:0.85}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#FFD100',weight:2,fillOpacity:0.6}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
 
       // — UI
       document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removePoint(p.id)); };
@@ -167,7 +179,20 @@
 
       // — Localisation utilisateur fiable (getCurrentPosition)
       let myMarker=null, myAccCircle=null; function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée par ce navigateur.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); myMarker=L.circleMarker([lat,lng],{radius:7,color:'#111827',weight:2,fillColor:'#111827',fillOpacity:0.4}).addTo(map).bindTooltip('Vous êtes ici'); myAccCircle=L.circle([lat,lng],{radius:acc,color:'#111827',weight:1,opacity:0.4,fillOpacity:0.05}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
+      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée par ce navigateur.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); clearMyLoc();
+        const myIcon = L.divIcon({
+          className: 'myloc-pin',
+          html: `
+            <svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/>
+              <circle cx="16" cy="12" r="5" fill="#34D399"/>
+            </svg>`,
+          iconSize: [28,28],
+          iconAnchor: [14,28],
+          popupAnchor: [0,-28]
+        });
+        myMarker = L.marker([lat,lng], {icon: myIcon, zIndexOffset: 1000}).addTo(map).bindTooltip('Vous êtes ici');
+        myAccCircle = L.circle([lat,lng], {radius: acc, color:'#34D399', weight:1, opacity:0.5, fillOpacity:0.06}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
       const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
 
       // — Géocodage (Photon → Nominatim)
