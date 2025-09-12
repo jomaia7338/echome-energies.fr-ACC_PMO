@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ACC – Vérification d’éligibilité (centre libre · 2/10/20 km)</title>
-  <!-- Leaflet minimal -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <!-- Leaflet CSS + fallback -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
@@ -22,12 +22,17 @@
     #status{margin:10px 12px 0;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;font-size:14px}
     #status.ok{background:#f2fbf7;border-color:#c7eadf}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
-    #map{height:calc(100svh - 210px);min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
+    #map{height:calc(100svh - 250px);min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
     .prod{background:#e74c3c}.cons{background:#2e86de}.sdis{background:#f1c40f}
     .small{font-size:12px;color:#64748b}
-    @media (max-width: 1100px){ .toolbar{grid-template-columns:1fr 1fr} #map{height:calc(100svh - 320px)} }
-    @media (max-width: 640px){ .toolbar{grid-template-columns:1fr} #map{height:calc(100svh - 440px)} }
+    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 6px;font-size:12px;background:#fff}
+    #searchResults ul{margin:6px 0 0 16px;padding:0}
+    #searchResults li{margin:2px 0}
+    #searchResults a{text-decoration:none;border-bottom:1px dashed #999;color:#111}
+    #searchResults a:hover{color:#000}
+    @media (max-width: 1100px){ .toolbar{grid-template-columns:1fr 1fr} #map{height:calc(100svh - 360px)} }
+    @media (max-width: 640px){ .toolbar{grid-template-columns:1fr} #map{height:calc(100svh - 520px)} }
   </style>
 </head>
 <body>
@@ -64,6 +69,7 @@
         <div class="row" style="margin-top:6px">
           <label><input id="includeSdis" type="checkbox"> Inclure SDIS (option)</label>
         </div>
+        <div class="small">Mesure pédagogique : on montre un <strong>cercle de rayon R</strong> au <strong>centre libre</strong>. La conformité officielle s’apprécie par la <strong>distance max</strong> entre deux participants éligibles.</div>
       </div>
 
       <div class="tool">
@@ -78,279 +84,123 @@
         <div class="row"><button id="exportCsvBtn" class="btn">Exporter CSV</button></div>
         <div class="small" style="margin-top:6px">CSV séparateur « ; » (Excel FR), lat/lon en WGS84</div>
       </div>
+
+      <div class="tool">
+        <label>5) Rechercher une adresse</label>
+        <div class="row">
+          <input id="searchQ" type="text" placeholder="Adresse, commune, code postal" style="flex:1;min-width:200px">
+          <button id="searchBtn" class="btn">Rechercher</button>
+        </div>
+        <div id="searchResults" class="small" aria-live="polite"></div>
+        <div class="small" style="margin-top:6px">Géocodage : <span class="pill">Photon/OSM</span> avec repli <span class="pill">Nominatim</span>. Cliquer un résultat = ajouter un point du <em>type sélectionné</em>.</div>
+      </div>
     </div>
   </header>
 
-  <div id="status">But pédagogique : <strong>existe-t‑il un centre libre</strong> tel qu’un <strong>cercle de rayon R</strong> contienne le producteur et tous les abonnés éligibles ? (SDIS exclu par défaut)</div>
+  <div id="status">Initialisation…</div>
   <div id="map" aria-label="Carte interactive"></div>
 
+  <!-- Leaflet JS (principal) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <script>
-    // ——— Helpers
-    const eps = 1e-9;
-    function toRad(d){ return d*Math.PI/180; }
-    function haversineKm(a,b){
-      const R=6371; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng);
-      const lat1=toRad(a.lat), lat2=toRad(b.lat);
-      const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
-      return 2*R*Math.asin(Math.sqrt(h));
-    }
-    function splitLines(t){ return (t||'').split(/\r?\n/); }
+    // Si Leaflet ne charge pas (unpkg bloqué), on bascule automatiquement sur cdnjs
+    (function ensureLeaflet(cb){
+      if(window.L){ cb(); return; }
+      var s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      s.crossOrigin='anonymous'; s.referrerPolicy='no-referrer';
+      s.onload=cb; s.onerror=function(){ document.getElementById('status').textContent='Erreur : Leaflet bloqué par le réseau.'; };
+      document.head.appendChild(s);
+    })(initApp);
 
-    // Proj. locale (km) & MEC (paires+triplets, robuste)
-    function projectLocal(pointsLL){
-      const lat0 = pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length;
-      const lon0 = pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length;
-      const P = pointsLL.map(p=>({ x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32, ref:p }));
-      return {lat0, lon0, P};
-    }
-    function unprojectLocal(lat0, lon0, x, y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
-    function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
-    function circleBy2(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, r:Math.sqrt(dist2(a,b))/2}; }
-    function circleBy3(a,b,c){
-      const A=b.x-a.x, B=b.y-a.y, C=c.x-a.x, D=c.y-a.y;
-      const E=A*(a.x+b.x)+B*(a.y+b.y); const F=C*(a.x+c.x)+D*(a.y+c.y);
-      const G=2*(A*(c.y-b.y)-B*(c.x-b.x)); if(Math.abs(G)<1e-12) return null; // colinéaires
-      const x=(D*E-B*F)/G, y=(A*F-C*E)/G; const r=Math.hypot(x-a.x,y-a.y); return {x,y,r};
-    }
-    function inCircle(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
-    function minimalEnclosingCircle(pointsLL){
-      if(pointsLL.length===0) return null; if(pointsLL.length===1) return {center:pointsLL[0], r:0};
-      const {lat0, lon0, P} = projectLocal(pointsLL);
-      let best=null;
-      for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const c=circleBy2(P[i],P[j]); if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; }
-      for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++) for(let k=j+1;k<P.length;k++){ const c=circleBy3(P[i],P[j],P[k]); if(!c) continue; if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; }
-      if(!best){ let max=-1,a=-1,b=-1; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const d=dist2(P[i],P[j]); if(d>max){max=d;a=i;b=j;} } best=circleBy2(P[a],P[b]); }
-      const center = unprojectLocal(lat0, lon0, best.x, best.y);
-      return {center, r:best.r}; // r en km (approx locale)
-    }
+    function initApp(){
+      const statusEl = document.getElementById('status');
+      const eps = 1e-9;
+      function toRad(d){ return d*Math.PI/180; }
+      function haversineKm(a,b){ const R=6371; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng); const lat1=toRad(a.lat), lat2=toRad(b.lat); const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+      function splitLines(t){ return (t||'').split(/\r?\n/); }
+      function esc(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-    // ——— Carte
-    const map = L.map('map', { zoomControl: true }).setView([46.6, 2.0], 6);
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-    L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
-    setTimeout(()=>{ try{ map.invalidateSize();
+      function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length; const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32, ref:p})); return {lat0,lon0,P}; }
+      function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
+      function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
+      function circleBy2(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:Math.sqrt(dist2(a,b))/2}; }
+      function circleBy3(a,b,c){ const A=b.x-a.x, B=b.y-a.y, C=c.x-a.x, D=c.y-a.y; const E=A*(a.x+b.x)+B*(a.y+b.y); const F=C*(a.x+c.x)+D*(a.y+c.y); const G=2*(A*(c.y-b.y)-B*(c.x-b.x)); if(Math.abs(G)<1e-12) return null; const x=(D*E-B*F)/G, y=(A*F-C*E)/G, r=Math.hypot(x-a.x,y-a.y); return {x,y,r}; }
+      function inCircle(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
+      function minimalEnclosingCircle(pointsLL){ if(pointsLL.length===0) return null; if(pointsLL.length===1) return {center:pointsLL[0], r:0}; const {lat0,lon0,P}=projectLocal(pointsLL); let best=null; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const c=circleBy2(P[i],P[j]); if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; } for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++) for(let k=j+1;k<P.length;k++){ const c=circleBy3(P[i],P[j],P[k]); if(!c) continue; if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; } if(!best){ let max=-1,a=-1,b=-1; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const d=dist2(P[i],P[j]); if(d>max){max=d;a=i;b=j;} } best=circleBy2(P[a],P[b]); } const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r}; }
 
-    // ——— Géolocalisation utilisateur (optionnelle)
-    let myMarker=null, myAccCircle=null;
-    function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-    function locateMe(){
-      if(!navigator.geolocation){ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation non supportée par ce navigateur.'; return; }
-      navigator.geolocation.getCurrentPosition(pos=>{
-        const lat=pos.coords.latitude, lng=pos.coords.longitude; const acc=pos.coords.accuracy||50;
-        clearMyLoc();
-        myMarker=L.circleMarker([lat,lng],{radius:7,color:'#111827',weight:2,fillColor:'#111827',fillOpacity:0.4}).addTo(map).bindTooltip('Vous êtes ici');
-        myAccCircle=L.circle([lat,lng],{radius:acc,color:'#111827',weight:1,opacity:0.4,fillOpacity:0.05}).addTo(map);
-        map.setView([lat,lng], 15);
-        const s=document.getElementById('status'); s.className=''; s.textContent=`Localisé (~±${Math.round(acc)} m).`;
-      }, err=>{
-        const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation refusée / indisponible.';
-      }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
-    }
+      // — Map + fallbacks tuiles
+      const map = L.map('map', { zoomControl:true }).setView([46.6, 2.0], 6);
+      const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© OpenStreetMap' });
+      const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© Carto, © OpenStreetMap' });
+      osm.on('tileerror', ()=>{ if(!map.hasLayer(carto)) carto.addTo(map); if(map.hasLayer(osm)) map.removeLayer(osm); statusEl.textContent='Fond OSM bloqué → bascule vers Carto Light.'; });
+      osm.addTo(map);
+      L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
+      setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 120);
 
-    // ——— Géocodage (Photon → Nominatim)
-    async function geocodePhoton(q){
-      const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=fr&limit=5';
-      const r = await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json();
-      const out=(j.features||[]).map(f=>{
-        const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null;
-        const lat=g.coordinates[1], lng=g.coordinates[0];
-        const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' ');
-        return {label: label || p.name || q, lat, lng};
-      }).filter(Boolean);
-      return out;
-    }
-    async function geocodeNominatim(q){
-      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=' + encodeURIComponent(q);
-      const r = await fetch(url, {headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json();
-      return j.map(o=>({ label: o.display_name, lat: parseFloat(o.lat), lng: parseFloat(o.lon) }));
-    }
-    async function searchAddress(q){
-      const box=document.getElementById('searchResults'); box.innerHTML='Recherche…';
-      let res=[]; try{ res=await geocodePhoton(q); }catch(_){}
-      if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){} }
-      if(!res.length){ box.innerHTML='Aucun résultat.'; return; }
-      const ul=document.createElement('ul');
-      res.forEach((r,i)=>{ const li=document.createElement('li'); li.innerHTML=`<a href="#" data-lat="${r.lat}" data-lng="${r.lng}" data-label="${esc(r.label)}">${esc(r.label)}</a>`; ul.appendChild(li); });
-      box.innerHTML=''; box.appendChild(ul);
-    }
+      // — État
+      const participants=[]; let uid=0; let accCircle=null; let accCenterMarker=null;
+      const colors={producer:'#e74c3c', consumer:'#2e86de', sdis:'#f1c40f'};
+      function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
+      function includeSdis(){ return document.getElementById('includeSdis').checked; }
+      function currentLimit(){ const sel=document.querySelector('input[name="limit"]:checked').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
+      function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
 
-    document.getElementById('searchBtn').addEventListener('click', ()=>{
-      const q=(document.getElementById('searchQ').value||'').trim(); if(!q) return; searchAddress(q);
-    });
-    document.getElementById('searchQ').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
-    document.getElementById('searchResults').addEventListener('click', (e)=>{
-      const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault();
-      const lat=parseFloat(a.getAttribute('data-lat')); const lng=parseFloat(a.getAttribute('data-lng')); const label=a.getAttribute('data-label');
-      addPoint(lat,lng, selectedType(), label);
-      map.setView([lat,lng], 15);
-    });
+      function addPoint(lat,lng,type,name){ const id=++uid; const label=name||`${type} ${id}`; const m=L.circleMarker([lat,lng],{radius:7,color:colors[type]||'#333',weight:2,fillColor:colors[type]||'#333',fillOpacity:0.3}).addTo(map); const entry={id,name:label,type,lat,lng,marker:m}; m.bindTooltip(`${label} (${type})`);
+        const defaultBtnHtml = type==='producer' ? `<button class="btn" data-act="makedef" data-id="${id}">Définir comme producteur par défaut</button>` : '';
+        m.bindPopup(`<strong>${label}</strong><br>${type}<br><div class="row" style="margin-top:6px"><button class="btn" data-act="rename" data-id="${id}">Renommer</button><button class="btn" data-act="delete" data-id="${id}">Supprimer</button>${defaultBtnHtml}</div>`);
+        m.on('popupopen', e=>{ const root=e.popup.getElement(); const ren=root.querySelector('button[data-act="rename"][data-id="'+id+'"]'); const del=root.querySelector('button[data-act="delete"][data-id="'+id+'"]'); const def=root.querySelector('button[data-act="makedef"][data-id="'+id+'"]'); if(ren) ren.addEventListener('click', ()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); m.setPopupContent(`<strong>${entry.name}</strong><br>${entry.type}<br><div class=\"row\" style=\"margin-top:6px\"><button class=\"btn\" data-act=\"rename\" data-id=\"${id}\">Renommer</button><button class=\"btn\" data-act=\"delete\" data-id=\"${id}\">Supprimer</button>${defaultBtnHtml}</div>`); m.bindTooltip(`${entry.name} (${entry.type})`);} }); if(del) del.addEventListener('click', ()=> removePoint(id)); if(def) def.addEventListener('click', ()=>{ try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:entry.lat,lng:entry.lng,name:entry.name||'Producteur'})); statusEl.className=''; statusEl.textContent='Producteur par défaut enregistré.'; }catch(_){ } }); });
+        m.on('contextmenu', ()=> removePoint(id)); participants.push(entry); refreshACC(); }
+      function removePoint(id){ const i=participants.findIndex(p=>p.id===id); if(i>-1){ map.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); } }
+      map.on('click', e=> addPoint(e.latlng.lat, e.latlng.lng, selectedType()));
 
-    // ——— Producteur par défaut (adresse projet)
-    const DEFAULT_PRODUCER_ADDR = '210 Les Espinasses, 38250 Villard-de-Lans, France';
-    async function initDefaultProducer(){
-      try{
-        const saved = localStorage.getItem('defaultProducer');
-        if(saved){ const obj=JSON.parse(saved); if(obj&&obj.lat&&obj.lng){ addPoint(obj.lat, obj.lng, 'producer', obj.name||'Projet 1 – Producteur'); return; } }
-      }catch(_){ }
-      try{
-        let res = [];
-        try{ res = await geocodePhoton(DEFAULT_PRODUCER_ADDR); }catch(_){}
-        if(!res.length){ try{ res = await geocodeNominatim(DEFAULT_PRODUCER_ADDR); }catch(_){} }
-        if(res && res[0]){
-          addPoint(res[0].lat, res[0].lng, 'producer', 'Projet 1 – Producteur');
-          try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:res[0].lat, lng:res[0].lng, name:'Projet 1 – Producteur'})); }catch(_){ }
-        }
-      }catch(_){ }
-    }
+      function clearAccCircle(){ if(accCircle){map.removeLayer(accCircle); accCircle=null;} if(accCenterMarker){map.removeLayer(accCenterMarker); accCenterMarker=null;} }
+      function styleInsideOutside(center, limitKm, eligible){ eligible.forEach(p=>{ const d = haversineKm(center, {lat:p.lat,lng:p.lng}); const inside = d <= limitKm + eps; p.marker.setStyle({ color: inside? '#15803d' : '#b91c1c', weight:2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.35:0.15 }); }); }
+      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:limit*1000,color:'#111827',weight:2,fill:false,opacity:0.85}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#111827',weight:2,fillOpacity:0.6}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
 
-    const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
-    document.getElementById('resetDefaultBtn').addEventListener('click', ()=>{ try{ localStorage.removeItem('defaultProducer'); const s=document.getElementById('status'); s.className=''; s.textContent='Producteur par défaut réinitialisé.'; }catch(_){ } });
+      // — UI
+      document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removePoint(p.id)); };
+      document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
+      Array.from(document.getElementsByName('limit')).forEach(r=> r.addEventListener('change', refreshACC));
+      document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked) refreshACC(); });
+      document.getElementById('includeSdis').addEventListener('change', refreshACC);
 
+      // — Localisation utilisateur fiable (getCurrentPosition)
+      let myMarker=null, myAccCircle=null; function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
+      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée par ce navigateur.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); myMarker=L.circleMarker([lat,lng],{radius:7,color:'#111827',weight:2,fillColor:'#111827',fillOpacity:0.4}).addTo(map).bindTooltip('Vous êtes ici'); myAccCircle=L.circle([lat,lng],{radius:acc,color:'#111827',weight:1,opacity:0.4,fillOpacity:0.05}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
+      const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
 
-    // ——— Géolocalisation utilisateur (optionnelle)
-    let myMarker=null, myAccCircle=null;
-    function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-    function locateMe(){
-      if(!navigator.geolocation){ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation non supportée par ce navigateur.'; return; }
-      map.locate({setView:true, maxZoom:15, enableHighAccuracy:true});
-    }
-    map.on('locationfound', e=>{
-      clearMyLoc();
-      myMarker=L.circleMarker(e.latlng,{radius:7,color:'#111827',weight:2,fillColor:'#111827',fillOpacity:0.4}).addTo(map).bindTooltip('Vous êtes ici');
-      myAccCircle=L.circle(e.latlng,{radius:e.accuracy||50,color:'#111827',weight:1,opacity:0.4,fillOpacity:0.05}).addTo(map);
-      const s=document.getElementById('status'); s.className=''; s.textContent=`Localisé (~±${Math.round(e.accuracy||50)} m).`;
-    });
-    map.on('locationerror', e=>{ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation indisponible (autorisation refusée ?).'; }); }catch(_){} }, 100);
+      // — Géocodage (Photon → Nominatim)
+      async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1], lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label || p.name || q, lat, lng}; }).filter(Boolean); }
+      async function geocodeNominatim(q){ const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q='+encodeURIComponent(q); const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json(); return j.map(o=>({label:o.display_name,lat:parseFloat(o.lat),lng:parseFloat(o.lon)})); }
+      async function searchAddress(q){ const box=document.getElementById('searchResults'); box.innerHTML='Recherche…'; let res=[]; try{ res=await geocodePhoton(q); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){ } } if(!res.length){ box.innerHTML='Aucun résultat.'; return; } const ul=document.createElement('ul'); res.forEach(r=>{ const li=document.createElement('li'); li.innerHTML=`<a href="#" data-lat="${r.lat}" data-lng="${r.lng}" data-label="${esc(r.label)}">${esc(r.label)}</a>`; ul.appendChild(li); }); box.innerHTML=''; box.appendChild(ul); }
+      document.getElementById('searchBtn').addEventListener('click', ()=>{ const q=(document.getElementById('searchQ').value||'').trim(); if(q) searchAddress(q); });
+      document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
+      document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); const lat=parseFloat(a.getAttribute('data-lat')), lng=parseFloat(a.getAttribute('data-lng')), label=a.getAttribute('data-label'); addPoint(lat,lng, selectedType(), label); map.setView([lat,lng], 15); });
 
-    // ——— État
-    const participants=[]; // {id,name,type,lat,lng,marker}
-    let uid=0; let accCircle=null; let accCenterMarker=null;
-    const colors={producer:'#e74c3c', consumer:'#2e86de', sdis:'#f1c40f'};
+      // — Import / Export
+      document.getElementById('importBtn').onclick = ()=>{ const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return; let ok=0,ko=0; splitLines(txt).forEach(line=>{ if(!line.trim()) return; const p=line.split(/[;,]|\t/).map(s=>s.trim()); if(p.length<4){ko++;return;} const [name,latS,lonS,typeS]=p; const lat=parseFloat(latS), lng=parseFloat(lonS); if(isNaN(lat)||isNaN(lng)){ko++;return;} let t=(typeS||'').toLowerCase(); if(t.startsWith('cons')) t='consumer'; else if(t.startsWith('prod')) t='producer'; else if(t!=='sdis'){ko++;return;} addPoint(lat,lng,t,name); ok++; }); statusEl.className=''; statusEl.innerHTML = `Import : ${ok} ajouté(s), ${ko} rejeté(s).`; };
+      document.getElementById('exportCsvBtn').onclick = ()=>{ if(!participants.length) return; const header='name;lat;lon;type'; const rows=participants.map(p=>[p.name?.replace(/;/g,','), p.lat.toFixed(6), p.lng.toFixed(6), p.type].join(';')); const csv=[header,...rows].join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='acc_points.csv'; a.click(); URL.revokeObjectURL(url); };
 
-    function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
-    function includeSdis(){ return document.getElementById('includeSdis').checked; }
-    function currentLimit(){ const sel=document.querySelector('input[name="limit"]:checked').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
-
-    function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
-
-    function addPoint(lat,lng,type,name){
-      const id=++uid; const label=name||`${type} ${id}`;
-      const m=L.circleMarker([lat,lng],{radius:7,color:colors[type]||'#333',weight:2,fillColor:colors[type]||'#333',fillOpacity:0.3}).addTo(map);
-      const entry={id,name:label,type,lat,lng,marker:m};
-      m.bindTooltip(`${label} (${type})`);
-      const defaultBtnHtml = type==='producer' ? `<button class="btn" data-act="makedef" data-id="${id}">Définir comme producteur par défaut</button>` : '';
-      m.bindPopup(`
-        <strong>${label}</strong><br>${type}<br>
-        <div class="row" style="margin-top:6px">
-          <button class="btn" data-act="rename" data-id="${id}">Renommer</button>
-          <button class="btn" data-act="delete" data-id="${id}">Supprimer</button>
-          ${defaultBtnHtml}
-        </div>
-      `);
-      m.on('popupopen', e=>{
-        const root=e.popup.getElement();
-        const ren=root.querySelector('button[data-act="rename"][data-id="'+id+'"]');
-        const del=root.querySelector('button[data-act="delete"][data-id="'+id+'"]');
-        const def=root.querySelector('button[data-act="makedef"][data-id="'+id+'"]');
-        if(ren) ren.addEventListener('click', ()=>{
-          const nn=prompt('Nouveau nom :', entry.name||'');
-          if(nn && nn.trim()){
-            entry.name=nn.trim();
-            m.setPopupContent(`
-              <strong>${entry.name}</strong><br>${entry.type}<br>
-              <div class=\"row\" style=\"margin-top:6px\">
-                <button class=\"btn\" data-act=\"rename\" data-id=\"${id}\">Renommer</button>
-                <button class=\"btn\" data-act=\"delete\" data-id=\"${id}\">Supprimer</button>
-                ${defaultBtnHtml}
-              </div>
-            `);
-            m.bindTooltip(`${entry.name} (${entry.type})`);
-          }
-        });
-        if(del) del.addEventListener('click', ()=> removePoint(id));
-        if(def) def.addEventListener('click', ()=>{
-          try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:entry.lat,lng:entry.lng,name:entry.name||'Producteur'}));
-            const s=document.getElementById('status'); s.className=''; s.textContent='Producteur par défaut enregistré.';
-          }catch(_){}
-        });
-      });
-      m.on('contextmenu', ()=> removePoint(id));
-      participants.push(entry);
-      refreshACC();
-    }
-    function removePoint(id){ const i=participants.findIndex(p=>p.id===id); if(i>-1){ map.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); } }
-    map.on('click', e=>{ addPoint(e.latlng.lat, e.latlng.lng, selectedType()); });
-
-    function clearAccCircle(){ if(accCircle){map.removeLayer(accCircle); accCircle=null;} if(accCenterMarker){map.removeLayer(accCenterMarker); accCenterMarker=null;} }
-
-    function styleInsideOutside(center, limitKm, eligible){
-      eligible.forEach(p=>{
-        const d = haversineKm(center, {lat:p.lat,lng:p.lng});
-        const inside = d <= limitKm + eps;
-        p.marker.setStyle({ color: inside? '#15803d' : '#b91c1c', weight: inside? 2:2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.35:0.15 });
-      });
-    }
-
-    function refreshACC(){
-      updateCount();
-      const limit = currentLimit();
-      const status = document.getElementById('status');
-      const eligibles = participants.filter(p=> includeSdis()? true : p.type!=='sdis');
-      const hasProducer = eligibles.some(p=> p.type==='producer');
-      clearAccCircle();
-
-      if(!eligibles.length){ status.className=''; status.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; }
-      if(!hasProducer){ status.className=''; status.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; }
-
-      const mec = minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng})));
-      // Affiche le cercle d'étude de rayon = limite (R), centré sur le centre libre MEC
-      accCircle = L.circle([mec.center.lat, mec.center.lng], {radius: limit*1000, color: '#111827', weight:2, fill:false, opacity:0.85}).addTo(map);
-      accCenterMarker = L.circleMarker([mec.center.lat, mec.center.lng], {radius:5, color:'#111827', weight:2, fillOpacity:0.6}).addTo(map);
-
-      const pass = mec.r <= limit + eps;
-      styleInsideOutside(mec.center, limit, eligibles);
-
-      if(pass){
-        status.className='ok';
-        status.innerHTML = `<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`;
-      } else {
-        // Lister les points hors zone R autour du centre optimal (informatif)
-        const outside = eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type);
-        status.className='ko';
-        status.innerHTML = `<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`;
+      // — Producteur par défaut (adresse projet)
+      const DEFAULT_ADDR='210 Les Espinasses, 38250 Villard-de-Lans, France';
+      const DEFAULT_FALLBACK={lat:45.073, lng:5.55}; // centre approximatif de Villard-de-Lans (fallback local)
+      async function initDefaultProducer(){ try{ const saved=localStorage.getItem('defaultProducer'); if(saved){ const obj=JSON.parse(saved); if(obj&&obj.lat&&obj.lng){ addPoint(obj.lat,obj.lng,'producer', obj.name||'Projet 1 – Producteur'); statusEl.textContent='Producteur par défaut chargé.'; return; } } }catch(_){ }
+        // Géocode l’adresse une fois (puis mémorise)
+        try{ let res=[]; try{ res=await geocodePhoton(DEFAULT_ADDR); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(DEFAULT_ADDR); }catch(_){ } } if(res && res[0]){ addPoint(res[0].lat, res[0].lng, 'producer', 'Projet 1 – Producteur'); try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:res[0].lat, lng:res[0].lng, name:'Projet 1 – Producteur'})); }catch(_){ } statusEl.textContent='Producteur par défaut géocodé.'; return; } }catch(_){ }
+        // Fallback dur si les services de géocodage sont bloqués
+        addPoint(DEFAULT_FALLBACK.lat, DEFAULT_FALLBACK.lng, 'producer', 'Projet 1 – Producteur (approx.)'); statusEl.textContent='Producteur par défaut (approx.) ajouté (géocodage indisponible).';
       }
+      document.getElementById('resetDefaultBtn').addEventListener('click', ()=>{ try{ localStorage.removeItem('defaultProducer'); statusEl.className=''; statusEl.textContent='Producteur par défaut réinitialisé.'; }catch(_){ } });
+
+      // — Lancer
+      try{ initDefaultProducer(); }catch(_){ }
+      statusEl.className=''; statusEl.textContent='Prêt.';
+
+      // — Filets de sécurité (diag rapide)
+      window.addEventListener('error', e=>{ statusEl.className=''; statusEl.textContent='Erreur JS : '+e.message; });
+      window.addEventListener('unhandledrejection', e=>{ statusEl.className=''; statusEl.textContent='Erreur Promesse : '+(e.reason?.message||e.reason); });
     }
-
-    // ——— UI
-    document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removePoint(p.id)); };
-    document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
-    Array.from(document.getElementsByName('limit')).forEach(r=> r.addEventListener('change', refreshACC));
-    document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked) refreshACC(); });
-    document.getElementById('includeSdis').addEventListener('change', refreshACC);
-    const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
-
-    document.getElementById('importBtn').onclick = ()=>{
-      const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return;
-      let ok=0,ko=0; splitLines(txt).forEach(line=>{
-        if(!line.trim()) return; const p=line.split(/[;,]|\t/).map(s=>s.trim());
-        if(p.length<4){ko++;return;} const [name, latS, lonS, typeS] = p; const lat=parseFloat(latS), lng=parseFloat(lonS);
-        if(isNaN(lat)||isNaN(lng)){ko++;return;} let t=(typeS||'').toLowerCase(); if(t.startsWith('cons')) t='consumer'; else if(t.startsWith('prod')) t='producer'; else if(t!=='sdis'){ko++;return;}
-        addPoint(lat,lng,t,name); ok++;
-      });
-      const box=document.getElementById('status'); box.className=''; box.innerHTML = `Import : ${ok} ajouté(s), ${ko} rejeté(s).`;
-    };
-
-    document.getElementById('exportCsvBtn').onclick = ()=>{
-      if(!participants.length) return;
-      const header='name;lat;lon;type';
-      const rows=participants.map(p=>[p.name?.replace(/;/g,','), p.lat.toFixed(6), p.lng.toFixed(6), p.type].join(';'));
-      const csv=[header,...rows].join('\n');
-      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download='acc_points.csv'; a.click(); URL.revokeObjectURL(url);
-    };
-
-    // ——— Départ : ajoute automatiquement le producteur de référence (persisté ensuite)
-    initDefaultProducer();
   </script>
 </body>
 </html>
