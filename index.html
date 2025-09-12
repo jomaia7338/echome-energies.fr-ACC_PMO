@@ -8,35 +8,70 @@
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     #map { height: 100vh; }
-    .control-panel {
+    .panel {
       position: absolute;
       top: 10px; left: 10px;
       background: white; padding: 10px;
       box-shadow: 0 0 5px rgba(0,0,0,0.3);
       z-index: 1000;
       font-family: sans-serif;
+      max-width: 300px;
     }
-    .btn { margin: 5px 0; padding: 5px 10px; cursor: pointer; }
+    .btn { margin: 5px 0; padding: 5px 10px; cursor: pointer; width: 100%; }
+    .row { display: flex; gap: 5px; margin-top: 5px; }
+    .hint { font-size: 0.9em; color: #555; margin-top: 5px; }
+    select, input { width: 100%; padding: 5px; }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <div class="control-panel">
-    <select id="pointType">
-      <option value="producteur">Producteur</option>
-      <option value="consommateur">Consommateur</option>
-      <option value="sdis">SDIS</option>
-    </select>
-    <button class="btn" onclick="toggleInsee()">Afficher grille INSEE</button>
-    <button class="btn" onclick="clearPoints()">Effacer points</button>
+  <div class="panel">
+    <fieldset>
+      <legend>Type de point</legend>
+      <select id="pointType">
+        <option value="producteur">Producteur</option>
+        <option value="consommateur">Consommateur</option>
+        <option value="sdis">SDIS</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cartes & données</legend>
+      <div class="hint">Fonds: OSM, IGN (clé optionnelle). Overlay INSEE.</div>
+      <div class="row">
+        <input id="ignKey" type="text" placeholder="Clé API IGN Géoportail (optionnel)">
+        <button id="useIgn" class="btn">Activer IGN</button>
+      </div>
+      <div class="row">
+        <button id="toggleInsee" class="btn">Afficher grille INSEE</button>
+        <button id="printMap" class="btn">Exporter image</button>
+      </div>
+      <div class="hint">Place le fichier ici : <span class="mono">/data/insee_grille.geojson</span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Actions</legend>
+      <button class="btn" onclick="clearPoints()">Effacer points</button>
+    </fieldset>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map = L.map('map').setView([45.1, 5.75], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    let osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
+
+    let ignLayer = null;
+    document.getElementById('useIgn').addEventListener('click', () => {
+      const key = document.getElementById('ignKey').value.trim();
+      if (!key) return alert("Clé IGN manquante");
+      if (ignLayer) map.removeLayer(ignLayer);
+      ignLayer = L.tileLayer(`https://wxs.ign.fr/${key}/geoportail/wmts?layer=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix={z}&TileRow={y}&TileCol={x}`, {
+        attribution: '© IGN',
+        tileSize: 256
+      }).addTo(map);
+    });
 
     let pointsLayer = L.layerGroup().addTo(map);
     let inseeLayer = null;
@@ -58,6 +93,15 @@
         fillOpacity: 0.6
       }).bindPopup(`${type} (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
       marker.addTo(pointsLayer);
+
+      if (type === 'producteur') {
+        const circle = L.circle([lat, lng], {
+          radius: 10000,
+          color: 'green',
+          fillOpacity: 0.1
+        }).bindPopup("Périmètre 10 km");
+        circle.addTo(pointsLayer);
+      }
     }
 
     map.on('click', e => {
@@ -108,6 +152,18 @@
         alert('Erreur lors du chargement de la grille INSEE.');
       }
     }
+
+    document.getElementById('toggleInsee').addEventListener('click', toggleInsee);
+
+    document.getElementById('printMap').addEventListener('click', () => {
+      html2canvas(document.getElementById('map')).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'carte_ACC.png';
+        link.href = canvas.toDataURL();
+        link.click();
+      });
+    });
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </body>
 </html>
