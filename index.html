@@ -45,6 +45,7 @@
           <button id="clearBtn" class="btn">Effacer tous les points</button>
           <button id="fitBtn" class="btn">Ajuster la vue</button>
           <button id="locateBtn" class="btn">📍 Me localiser</button>
+          <button id="resetDefaultBtn" class="btn">Réinitialiser défaut</button>
         </div>
         <div id="count" class="small" style="margin-top:6px">Aucun point.</div>
       </div>
@@ -134,6 +135,83 @@
     function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
     function locateMe(){
       if(!navigator.geolocation){ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation non supportée par ce navigateur.'; return; }
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const lat=pos.coords.latitude, lng=pos.coords.longitude; const acc=pos.coords.accuracy||50;
+        clearMyLoc();
+        myMarker=L.circleMarker([lat,lng],{radius:7,color:'#111827',weight:2,fillColor:'#111827',fillOpacity:0.4}).addTo(map).bindTooltip('Vous êtes ici');
+        myAccCircle=L.circle([lat,lng],{radius:acc,color:'#111827',weight:1,opacity:0.4,fillOpacity:0.05}).addTo(map);
+        map.setView([lat,lng], 15);
+        const s=document.getElementById('status'); s.className=''; s.textContent=`Localisé (~±${Math.round(acc)} m).`;
+      }, err=>{
+        const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation refusée / indisponible.';
+      }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
+    }
+
+    // ——— Géocodage (Photon → Nominatim)
+    async function geocodePhoton(q){
+      const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=fr&limit=5';
+      const r = await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json();
+      const out=(j.features||[]).map(f=>{
+        const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null;
+        const lat=g.coordinates[1], lng=g.coordinates[0];
+        const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' ');
+        return {label: label || p.name || q, lat, lng};
+      }).filter(Boolean);
+      return out;
+    }
+    async function geocodeNominatim(q){
+      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=' + encodeURIComponent(q);
+      const r = await fetch(url, {headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json();
+      return j.map(o=>({ label: o.display_name, lat: parseFloat(o.lat), lng: parseFloat(o.lon) }));
+    }
+    async function searchAddress(q){
+      const box=document.getElementById('searchResults'); box.innerHTML='Recherche…';
+      let res=[]; try{ res=await geocodePhoton(q); }catch(_){}
+      if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){} }
+      if(!res.length){ box.innerHTML='Aucun résultat.'; return; }
+      const ul=document.createElement('ul');
+      res.forEach((r,i)=>{ const li=document.createElement('li'); li.innerHTML=`<a href="#" data-lat="${r.lat}" data-lng="${r.lng}" data-label="${esc(r.label)}">${esc(r.label)}</a>`; ul.appendChild(li); });
+      box.innerHTML=''; box.appendChild(ul);
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', ()=>{
+      const q=(document.getElementById('searchQ').value||'').trim(); if(!q) return; searchAddress(q);
+    });
+    document.getElementById('searchQ').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
+    document.getElementById('searchResults').addEventListener('click', (e)=>{
+      const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault();
+      const lat=parseFloat(a.getAttribute('data-lat')); const lng=parseFloat(a.getAttribute('data-lng')); const label=a.getAttribute('data-label');
+      addPoint(lat,lng, selectedType(), label);
+      map.setView([lat,lng], 15);
+    });
+
+    // ——— Producteur par défaut (adresse projet)
+    const DEFAULT_PRODUCER_ADDR = '210 Les Espinasses, 38250 Villard-de-Lans, France';
+    async function initDefaultProducer(){
+      try{
+        const saved = localStorage.getItem('defaultProducer');
+        if(saved){ const obj=JSON.parse(saved); if(obj&&obj.lat&&obj.lng){ addPoint(obj.lat, obj.lng, 'producer', obj.name||'Projet 1 – Producteur'); return; } }
+      }catch(_){ }
+      try{
+        let res = [];
+        try{ res = await geocodePhoton(DEFAULT_PRODUCER_ADDR); }catch(_){}
+        if(!res.length){ try{ res = await geocodeNominatim(DEFAULT_PRODUCER_ADDR); }catch(_){} }
+        if(res && res[0]){
+          addPoint(res[0].lat, res[0].lng, 'producer', 'Projet 1 – Producteur');
+          try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:res[0].lat, lng:res[0].lng, name:'Projet 1 – Producteur'})); }catch(_){ }
+        }
+      }catch(_){ }
+    }
+
+    const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
+    document.getElementById('resetDefaultBtn').addEventListener('click', ()=>{ try{ localStorage.removeItem('defaultProducer'); const s=document.getElementById('status'); s.className=''; s.textContent='Producteur par défaut réinitialisé.'; }catch(_){ } });
+
+
+    // ——— Géolocalisation utilisateur (optionnelle)
+    let myMarker=null, myAccCircle=null;
+    function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
+    function locateMe(){
+      if(!navigator.geolocation){ const s=document.getElementById('status'); s.className=''; s.textContent='Géolocalisation non supportée par ce navigateur.'; return; }
       map.locate({setView:true, maxZoom:15, enableHighAccuracy:true});
     }
     map.on('locationfound', e=>{
@@ -158,20 +236,23 @@
     function addPoint(lat,lng,type,name){
       const id=++uid; const label=name||`${type} ${id}`;
       const m=L.circleMarker([lat,lng],{radius:7,color:colors[type]||'#333',weight:2,fillColor:colors[type]||'#333',fillOpacity:0.3}).addTo(map);
+      const entry={id,name:label,type,lat,lng,marker:m};
       m.bindTooltip(`${label} (${type})`);
+      const defaultBtnHtml = type==='producer' ? `<button class="btn" data-act="makedef" data-id="${id}">Définir comme producteur par défaut</button>` : '';
       m.bindPopup(`
         <strong>${label}</strong><br>${type}<br>
         <div class="row" style="margin-top:6px">
           <button class="btn" data-act="rename" data-id="${id}">Renommer</button>
           <button class="btn" data-act="delete" data-id="${id}">Supprimer</button>
+          ${defaultBtnHtml}
         </div>
       `);
       m.on('popupopen', e=>{
         const root=e.popup.getElement();
         const ren=root.querySelector('button[data-act="rename"][data-id="'+id+'"]');
         const del=root.querySelector('button[data-act="delete"][data-id="'+id+'"]');
+        const def=root.querySelector('button[data-act="makedef"][data-id="'+id+'"]');
         if(ren) ren.addEventListener('click', ()=>{
-          const entry=participants.find(p=>p.id===id); if(!entry) return;
           const nn=prompt('Nouveau nom :', entry.name||'');
           if(nn && nn.trim()){
             entry.name=nn.trim();
@@ -180,15 +261,21 @@
               <div class=\"row\" style=\"margin-top:6px\">
                 <button class=\"btn\" data-act=\"rename\" data-id=\"${id}\">Renommer</button>
                 <button class=\"btn\" data-act=\"delete\" data-id=\"${id}\">Supprimer</button>
+                ${defaultBtnHtml}
               </div>
             `);
             m.bindTooltip(`${entry.name} (${entry.type})`);
           }
         });
         if(del) del.addEventListener('click', ()=> removePoint(id));
+        if(def) def.addEventListener('click', ()=>{
+          try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:entry.lat,lng:entry.lng,name:entry.name||'Producteur'}));
+            const s=document.getElementById('status'); s.className=''; s.textContent='Producteur par défaut enregistré.';
+          }catch(_){}
+        });
       });
       m.on('contextmenu', ()=> removePoint(id));
-      participants.push({id,name:label,type,lat,lng,marker:m});
+      participants.push(entry);
       refreshACC();
     }
     function removePoint(id){ const i=participants.findIndex(p=>p.id===id); if(i>-1){ map.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); } }
@@ -262,7 +349,8 @@
       const a=document.createElement('a'); a.href=url; a.download='acc_points.csv'; a.click(); URL.revokeObjectURL(url);
     };
 
-    // ——— Départ : rien par défaut (tu ajoutes tes points)
+    // ——— Départ : ajoute automatiquement le producteur de référence (persisté ensuite)
+    initDefaultProducer();
   </script>
 </body>
 </html>
