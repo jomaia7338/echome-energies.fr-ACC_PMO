@@ -13,6 +13,7 @@
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
     header{padding:12px;border-bottom:1px solid var(--line)}
     header h1{margin:0 0 6px 0;font-size:18px}
+    .topbar{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-bottom:8px}
     .toolbar{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:8px}
     .tool{background:var(--muted);border:1px solid var(--line);border-radius:10px;padding:10px}
     .tool label{font-size:12px;color:#475569;display:block;margin-bottom:6px}
@@ -22,7 +23,7 @@
     #status{margin:10px 12px 0;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;font-size:14px}
     #status.ok{background:#f2fbf7;border-color:#c7eadf}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
-    #map{height:calc(100svh - 250px);min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
+    #map{min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
     .prod{background:#FFD100}.cons{background:#2e86de}.sdis{background:#E10600}
     .small{font-size:12px;color:#64748b}
@@ -31,13 +32,25 @@
     #searchResults li{margin:2px 0}
     #searchResults a{text-decoration:none;border-bottom:1px dashed #999;color:#111}
     #searchResults a:hover{color:#000}
-    @media (max-width: 1100px){ .toolbar{grid-template-columns:1fr 1fr} #map{height:calc(100svh - 360px)} }
-    @media (max-width: 640px){ .toolbar{grid-template-columns:1fr} #map{height:calc(100svh - 520px)} }
+    /* Compact header & advanced toggle */
+    body.compact header{padding:6px 8px}
+    body.compact .tool{padding:6px}
+    body.compact .tool label{margin-bottom:4px}
+    body.compact .toolbar{grid-template-columns:repeat(3,minmax(180px,1fr));gap:6px}
+    .tool.advanced{ /* visible par défaut */ }
+    body.compact .tool.advanced{display:none}
+    body.compact.show-advanced .tool.advanced{display:block}
+    @media (max-width: 1100px){ .toolbar{grid-template-columns:1fr 1fr} }
+    @media (max-width: 640px){ .toolbar{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
   <header>
     <h1>ACC – Vérification d’éligibilité (centre libre)</h1>
+    <div class="topbar">
+      <button id="toggleBar" class="btn" title="Réduire/agrandir la barre">↕ Réduire la barre</button>
+      <button id="toggleAdvanced" class="btn" title="Afficher/masquer les options avancées">Options avancées</button>
+    </div>
     <div class="toolbar">
       <div class="tool">
         <label>1) Ajouter des points (clic carte) — choisir le type :</label>
@@ -72,20 +85,20 @@
         <div class="small">Mesure pédagogique : on montre un <strong>cercle de rayon R</strong> au <strong>centre libre</strong>. La conformité officielle s’apprécie par la <strong>distance max</strong> entre deux participants éligibles.</div>
       </div>
 
-      <div class="tool">
+      <div class="tool advanced">
         <label>3) Import rapide (Nom;Lat;Lon;Type)</label>
-        <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer\nCollège B;45.77;4.86;consumer" style="width:100%;min-height:80px"></textarea>
+        <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer" style="width:100%;min-height:70px"></textarea>
         <div class="row" style="margin-top:6px"><button id="importBtn" class="btn">Importer</button></div>
         <div class="small">Types acceptés : consumer / producer / sdis</div>
       </div>
 
-      <div class="tool">
+      <div class="tool advanced">
         <label>4) Export</label>
         <div class="row"><button id="exportCsvBtn" class="btn">Exporter CSV</button></div>
         <div class="small" style="margin-top:6px">CSV séparateur « ; » (Excel FR), lat/lon en WGS84</div>
       </div>
 
-      <div class="tool">
+      <div class="tool advanced">
         <label>5) Rechercher une adresse</label>
         <div class="row">
           <input id="searchQ" type="text" placeholder="Adresse, commune, code postal" style="flex:1;min-width:200px">
@@ -115,12 +128,15 @@
 
     function initApp(){
       const statusEl = document.getElementById('status');
+      const mapEl = document.getElementById('map');
+      // Helpers
       const eps = 1e-9;
-      function toRad(d){ return d*Math.PI/180; }
+      const toRad = d => d*Math.PI/180;
       function haversineKm(a,b){ const R=6371; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng); const lat1=toRad(a.lat), lat2=toRad(b.lat); const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
       function splitLines(t){ return (t||'').split(/\r?\n/); }
       function esc(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
+      // MEC utilitaires
       function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length; const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32, ref:p})); return {lat0,lon0,P}; }
       function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
       function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
@@ -129,16 +145,18 @@
       function inCircle(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
       function minimalEnclosingCircle(pointsLL){ if(pointsLL.length===0) return null; if(pointsLL.length===1) return {center:pointsLL[0], r:0}; const {lat0,lon0,P}=projectLocal(pointsLL); let best=null; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const c=circleBy2(P[i],P[j]); if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; } for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++) for(let k=j+1;k<P.length;k++){ const c=circleBy3(P[i],P[j],P[k]); if(!c) continue; if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; } if(!best){ let max=-1,a=-1,b=-1; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const d=dist2(P[i],P[j]); if(d>max){max=d;a=i;b=j;} } best=circleBy2(P[a],P[b]); } const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r}; }
 
-      // — Map + fallbacks tuiles
+      // Carte + fallbacks tuiles
       const map = L.map('map', { zoomControl:true }).setView([46.6, 2.0], 6);
       const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© OpenStreetMap' });
       const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© Carto, © OpenStreetMap' });
       osm.on('tileerror', ()=>{ if(!map.hasLayer(carto)) carto.addTo(map); if(map.hasLayer(osm)) map.removeLayer(osm); statusEl.textContent='Fond OSM bloqué → bascule vers Carto Light.'; });
       osm.addTo(map);
       L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
-      setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 120);
+      function layout(){ const H=document.querySelector('header'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height = h + 'px'; try{ map.invalidateSize(); }catch(_){ } }
+      window.addEventListener('resize', layout);
+      setTimeout(layout, 50);
 
-      // — État
+      // État
       const participants=[]; let uid=0; let accCircle=null; let accCenterMarker=null;
       const colors={producer:'#FFD100', consumer:'#2e86de', sdis:'#E10600'};
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
@@ -155,47 +173,24 @@
       map.on('click', e=> addPoint(e.latlng.lat, e.latlng.lng, selectedType()));
 
       function clearAccCircle(){ if(accCircle){map.removeLayer(accCircle); accCircle=null;} if(accCenterMarker){map.removeLayer(accCenterMarker); accCenterMarker=null;} }
-      function styleInsideOutside(center, limitKm, eligible){
-      eligible.forEach(p=>{
-        const d = haversineKm(center, {lat:p.lat,lng:p.lng});
-        const inside = d <= limitKm + eps;
-        p.marker.setStyle({
-          color: colors[p.type]||'#333',
-          weight: inside? 3 : 2,
-          fillColor: colors[p.type]||'#333',
-          fillOpacity: inside? 0.5 : 0.15,
-          opacity: 1
-        });
-      });
-    }); const inside = d <= limitKm + eps; p.marker.setStyle({ color: inside? '#15803d' : '#b91c1c', weight:2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.35:0.15 }); }); }
-      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:limit*1000,color:'#FFD100',weight:2,fill:false,opacity:0.85}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#FFD100',weight:2,fillOpacity:0.6}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
+      function styleInsideOutside(center, limitKm, eligible){ eligible.forEach(p=>{ const d = haversineKm(center, {lat:p.lat,lng:p.lng}); const inside = d <= limitKm + eps; p.marker.setStyle({ color: colors[p.type]||'#333', weight: inside? 3 : 2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.5:0.15, opacity:1 }); }); }
+      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:currentLimit()*1000,color:'#FFD100',weight:2,fill:false,opacity:0.85}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#FFD100',weight:2,fillOpacity:0.6}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
 
-      // — UI
+      // UI
+      document.getElementById('toggleBar').onclick = ()=>{ document.body.classList.toggle('compact'); layout(); };
+      document.getElementById('toggleAdvanced').onclick = ()=>{ document.body.classList.toggle('show-advanced'); layout(); };
       document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removePoint(p.id)); };
       document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
       Array.from(document.getElementsByName('limit')).forEach(r=> r.addEventListener('change', refreshACC));
       document.getElementById('customKm').addEventListener('input', ()=>{ if(document.querySelector('input[name="limit"][value="custom"]').checked) refreshACC(); });
       document.getElementById('includeSdis').addEventListener('change', refreshACC);
 
-      // — Localisation utilisateur fiable (getCurrentPosition)
+      // Localisation utilisateur (épingle verte)
       let myMarker=null, myAccCircle=null; function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée par ce navigateur.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); clearMyLoc();
-        const myIcon = L.divIcon({
-          className: 'myloc-pin',
-          html: `
-            <svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-              <path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/>
-              <circle cx="16" cy="12" r="5" fill="#34D399"/>
-            </svg>`,
-          iconSize: [28,28],
-          iconAnchor: [14,28],
-          popupAnchor: [0,-28]
-        });
-        myMarker = L.marker([lat,lng], {icon: myIcon, zIndexOffset: 1000}).addTo(map).bindTooltip('Vous êtes ici');
-        myAccCircle = L.circle([lat,lng], {radius: acc, color:'#34D399', weight:1, opacity:0.5, fillOpacity:0.06}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
+      function locateMe(){ if(!navigator.geolocation){ statusEl.className=''; statusEl.textContent='Géolocalisation non supportée par ce navigateur.'; return; } navigator.geolocation.getCurrentPosition(pos=>{ const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50; clearMyLoc(); const myIcon=L.divIcon({className:'myloc-pin', html:`<svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/><circle cx="16" cy="12" r="5" fill="#34D399"/></svg>`, iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-28]}); myMarker=L.marker([lat,lng],{icon:myIcon,zIndexOffset:1000}).addTo(map).bindTooltip('Vous êtes ici'); myAccCircle=L.circle([lat,lng],{radius:acc,color:'#34D399',weight:1,opacity:0.5,fillOpacity:0.06}).addTo(map); map.setView([lat,lng], 15); statusEl.className=''; statusEl.textContent=`Localisé (~±${Math.round(acc)} m).`; }, err=>{ statusEl.className=''; statusEl.textContent='Géolocalisation refusée / indisponible.'; }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000}); }
       const locateBtn=document.getElementById('locateBtn'); if(locateBtn) locateBtn.addEventListener('click', locateMe);
 
-      // — Géocodage (Photon → Nominatim)
+      // Géocodage (Photon → Nominatim)
       async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1], lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label || p.name || q, lat, lng}; }).filter(Boolean); }
       async function geocodeNominatim(q){ const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q='+encodeURIComponent(q); const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json(); return j.map(o=>({label:o.display_name,lat:parseFloat(o.lat),lng:parseFloat(o.lon)})); }
       async function searchAddress(q){ const box=document.getElementById('searchResults'); box.innerHTML='Recherche…'; let res=[]; try{ res=await geocodePhoton(q); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){ } } if(!res.length){ box.innerHTML='Aucun résultat.'; return; } const ul=document.createElement('ul'); res.forEach(r=>{ const li=document.createElement('li'); li.innerHTML=`<a href="#" data-lat="${r.lat}" data-lng="${r.lng}" data-label="${esc(r.label)}">${esc(r.label)}</a>`; ul.appendChild(li); }); box.innerHTML=''; box.appendChild(ul); }
@@ -203,26 +198,26 @@
       document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
       document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); const lat=parseFloat(a.getAttribute('data-lat')), lng=parseFloat(a.getAttribute('data-lng')), label=a.getAttribute('data-label'); addPoint(lat,lng, selectedType(), label); map.setView([lat,lng], 15); });
 
-      // — Import / Export
+      // Import / Export
       document.getElementById('importBtn').onclick = ()=>{ const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return; let ok=0,ko=0; splitLines(txt).forEach(line=>{ if(!line.trim()) return; const p=line.split(/[;,]|\t/).map(s=>s.trim()); if(p.length<4){ko++;return;} const [name,latS,lonS,typeS]=p; const lat=parseFloat(latS), lng=parseFloat(lonS); if(isNaN(lat)||isNaN(lng)){ko++;return;} let t=(typeS||'').toLowerCase(); if(t.startsWith('cons')) t='consumer'; else if(t.startsWith('prod')) t='producer'; else if(t!=='sdis'){ko++;return;} addPoint(lat,lng,t,name); ok++; }); statusEl.className=''; statusEl.innerHTML = `Import : ${ok} ajouté(s), ${ko} rejeté(s).`; };
       document.getElementById('exportCsvBtn').onclick = ()=>{ if(!participants.length) return; const header='name;lat;lon;type'; const rows=participants.map(p=>[p.name?.replace(/;/g,','), p.lat.toFixed(6), p.lng.toFixed(6), p.type].join(';')); const csv=[header,...rows].join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='acc_points.csv'; a.click(); URL.revokeObjectURL(url); };
 
-      // — Producteur par défaut (adresse projet)
+      // Producteur par défaut (adresse projet)
       const DEFAULT_ADDR='210 Les Espinasses, 38250 Villard-de-Lans, France';
-      const DEFAULT_FALLBACK={lat:45.073, lng:5.55}; // centre approximatif de Villard-de-Lans (fallback local)
+      const DEFAULT_FALLBACK={lat:45.073, lng:5.55};
       async function initDefaultProducer(){ try{ const saved=localStorage.getItem('defaultProducer'); if(saved){ const obj=JSON.parse(saved); if(obj&&obj.lat&&obj.lng){ addPoint(obj.lat,obj.lng,'producer', obj.name||'Projet 1 – Producteur'); statusEl.textContent='Producteur par défaut chargé.'; return; } } }catch(_){ }
-        // Géocode l’adresse une fois (puis mémorise)
         try{ let res=[]; try{ res=await geocodePhoton(DEFAULT_ADDR); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(DEFAULT_ADDR); }catch(_){ } } if(res && res[0]){ addPoint(res[0].lat, res[0].lng, 'producer', 'Projet 1 – Producteur'); try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:res[0].lat, lng:res[0].lng, name:'Projet 1 – Producteur'})); }catch(_){ } statusEl.textContent='Producteur par défaut géocodé.'; return; } }catch(_){ }
-        // Fallback dur si les services de géocodage sont bloqués
         addPoint(DEFAULT_FALLBACK.lat, DEFAULT_FALLBACK.lng, 'producer', 'Projet 1 – Producteur (approx.)'); statusEl.textContent='Producteur par défaut (approx.) ajouté (géocodage indisponible).';
       }
       document.getElementById('resetDefaultBtn').addEventListener('click', ()=>{ try{ localStorage.removeItem('defaultProducer'); statusEl.className=''; statusEl.textContent='Producteur par défaut réinitialisé.'; }catch(_){ } });
 
-      // — Lancer
+      // Lancer
       try{ initDefaultProducer(); }catch(_){ }
+      document.body.classList.add('compact');
+      layout();
       statusEl.className=''; statusEl.textContent='Prêt.';
 
-      // — Filets de sécurité (diag rapide)
+      // Diag visibles
       window.addEventListener('error', e=>{ statusEl.className=''; statusEl.textContent='Erreur JS : '+e.message; });
       window.addEventListener('unhandledrejection', e=>{ statusEl.className=''; statusEl.textContent='Erreur Promesse : '+(e.reason?.message||e.reason); });
     }
