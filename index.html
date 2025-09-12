@@ -6,7 +6,9 @@
   <title>ACC étendue – Étude PMO (centre libre, emprise, distance max) · Echome Energies</title>
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <!-- Turf (géométries) -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <!-- Export image carte -->
@@ -25,7 +27,7 @@
     header .sub{font-size:13px;color:#4b5563}
     .toggle{display:none;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:600}
     .toggle:hover{border-color:#cfd8d8}
-    .wrap{display:grid;grid-template-columns:380px 1fr;height:calc(100% - 58px)}
+    .wrap{display:grid;grid-template-columns:380px 1fr;}
     aside{position:relative;border-right:1px solid var(--line);background:var(--muted);padding:12px;overflow:auto}
     aside h2{font-size:14px;margin:10px 0 8px;color:#0f172a}
     aside label{font-size:13px}
@@ -38,6 +40,7 @@
     .btn.primary{background:var(--turq);border-color:var(--turq);color:#fff}
     .note{font-size:12px;color:#475569;background:#f0fbf9;border:1px solid #d5efea;border-left:4px solid var(--turq);padding:8px 10px;border-radius:8px}
     #map{height:100%}
+    .mapwrap{height:calc(100svh - 120px);min-height:420px}
     .mapwrap{height:100%;min-height:420px}
     .sticky{position:sticky;top:8px;z-index:10}
     .status{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;margin-top:6px;font-size:13px}
@@ -213,6 +216,8 @@ function mec(pts){
 
 // ——— Map
 const map = L.map('map', { zoomControl: true }).setView([46.6, 2.0], 6);
+// Fix affichage initial si container a été redimensionné
+setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){} }, 120);
 const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom: 19, attribution:'© OpenStreetMap', crossOrigin: true }).addTo(map);
 L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
 const printer = L.easyPrint({ tileLayer: osmLayer, sizeModes: ['A4Portrait','A4Landscape'], filename: 'acc_etendue_carte', exportOnly: true, hideControlContainer: false }).addTo(map);
