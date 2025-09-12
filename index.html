@@ -6,28 +6,28 @@
   <title>ACC – Vérification d’éligibilité (centre libre · 2/10/20 km)</title>
   <!-- Leaflet CSS + fallback -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  $1<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
+    body{margin:0;font-family:'Open Sans', system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;color:var(--ink);background:#fff}
     header{padding:12px;border-bottom:1px solid var(--line)}
-    header h1{margin:0 0 6px 0;font-size:18px}
+    header h1{margin:0 0 6px 0;font-size:18px;font-family:'Montserrat',sans-serif;letter-spacing:.2px;color:var(--ink)}
     .topbar{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-bottom:8px}
     .toolbar{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:8px}
     .tool{background:var(--muted);border:1px solid var(--line);border-radius:10px;padding:10px}
     .tool label{font-size:12px;color:#475569;display:block;margin-bottom:6px}
     .tool .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-    .btn{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-weight:600}
-    .btn:hover{border-color:#cfd8d8}
+    .btn{padding:8px 12px;border:1px solid var(--brand);border-radius:10px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+    .btn:hover{background:#2ea996;border-color:#2ea996}
     #status{margin:10px 12px 0;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;font-size:14px}
-    #status.ok{background:#f2fbf7;border-color:#c7eadf}
+    #status.ok{background:rgba(55,195,175,.08);border-color:rgba(55,195,175,.45);color:#116a60}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
     #map{min-height:420px;margin:12px;border:1px solid var(--line);border-radius:12px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-    .prod{background:#FFD100}.cons{background:#2e86de}.sdis{background:#E10600}
+    .prod{background:#6D28D9}.cons{background:#2e86de}.sdis{background:#E10600}
     .small{font-size:12px;color:#64748b}
-    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 6px;font-size:12px;background:#fff}
+    .pill{display:inline-block;border:1px solid var(--brand);border-radius:999px;padding:2px 8px;font-size:12px;background:#fff;color:var(--brand)}
     #searchResults ul{margin:6px 0 0 16px;padding:0}
     #searchResults li{margin:2px 0}
     #searchResults a{text-decoration:none;border-bottom:1px dashed #999;color:#111}
@@ -158,7 +158,7 @@
 
       // État
       const participants=[]; let uid=0; let accCircle=null; let accCenterMarker=null;
-      const colors={producer:'#FFD100', consumer:'#2e86de', sdis:'#E10600'};
+      const colors={producer:'#6D28D9', consumer:'#2e86de', sdis:'#E10600'};
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
       function includeSdis(){ return document.getElementById('includeSdis').checked; }
       function currentLimit(){ const sel=document.querySelector('input[name="limit"]:checked').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
@@ -174,7 +174,7 @@
 
       function clearAccCircle(){ if(accCircle){map.removeLayer(accCircle); accCircle=null;} if(accCenterMarker){map.removeLayer(accCenterMarker); accCenterMarker=null;} }
       function styleInsideOutside(center, limitKm, eligible){ eligible.forEach(p=>{ const d = haversineKm(center, {lat:p.lat,lng:p.lng}); const inside = d <= limitKm + eps; p.marker.setStyle({ color: colors[p.type]||'#333', weight: inside? 3 : 2, fillColor: colors[p.type]||'#333', fillOpacity: inside? 0.5:0.15, opacity:1 }); }); }
-      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:currentLimit()*1000,color:'#FFD100',weight:2,fill:false,opacity:0.85}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#FFD100',weight:2,fillOpacity:0.6}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
+      function refreshACC(){ updateCount(); const limit=currentLimit(); const eligibles=participants.filter(p=> includeSdis()? true : p.type!=='sdis'); const hasProducer=eligibles.some(p=> p.type==='producer'); clearAccCircle(); if(!eligibles.length){ statusEl.className=''; statusEl.textContent='Ajoutez un producteur et des consommateurs (SDIS exclu par défaut).'; return; } if(!hasProducer){ statusEl.className=''; statusEl.textContent='Aucun producteur détecté : ajoutez au moins un point « Producteur ».'; return; } const mec=minimalEnclosingCircle(eligibles.map(p=>({lat:p.lat,lng:p.lng}))); accCircle=L.circle([mec.center.lat,mec.center.lng],{radius:currentLimit()*1000,color:'#6D28D9',weight:3,fill:false,opacity:0.95}).addTo(map); accCenterMarker=L.circleMarker([mec.center.lat,mec.center.lng],{radius:5,color:'#6D28D9',weight:2,fillOpacity:0.7}).addTo(map); const pass=mec.r<=limit+eps; styleInsideOutside(mec.center,limit,eligibles); if(pass){ statusEl.className='ok'; statusEl.innerHTML=`<strong>Conforme</strong> — Il existe un <strong>centre libre</strong> tel qu’un <strong>cercle de rayon ${limit} km</strong> contienne le producteur et tous les abonnés éligibles.<br><span class="small">Centre suggéré : ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · Rayon minimal requis : ${mec.r.toFixed(2)} km (≤ ${limit} km)</span>`; } else { const outside=eligibles.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > limit + eps).map(p=> p.name||p.type); statusEl.className='ko'; statusEl.innerHTML=`<strong>Non conforme</strong> — Aucun centre libre ne peut englober tous les participants dans un cercle de <strong>${limit} km</strong>.<br><span class="small">Rayon minimal requis : ${mec.r.toFixed(2)} km (> ${limit} km). Points limitants : ${outside.join(', ')||'—'}</span>`; } }
 
       // UI
       document.getElementById('toggleBar').onclick = ()=>{ document.body.classList.toggle('compact'); layout(); };
