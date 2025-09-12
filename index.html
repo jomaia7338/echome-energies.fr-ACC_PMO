@@ -1,736 +1,113 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>ACC étendue – Étude PMO (géolocalisation, centre libre, emprise)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <!-- Turf.js (buffers, point-in-polygon) -->
-  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-  <!-- Leaflet EasyPrint (export image) -->
-  <script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Outil ACC Étendue</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    :root{
-      --bg:#0f1221; --panel:#14182b; --muted:#8c94af; --text:#e7ebff;
-      --accent:#5dd39e; --warn:#ffb020; --bad:#ff5c7a; --prod:#ff7a00; --cons:#2ea8ff; --sdis:#9b59b6;
+    html, body { margin: 0; padding: 0; height: 100%; }
+    #map { height: 100vh; }
+    .control-panel {
+      position: absolute;
+      top: 10px; left: 10px;
+      background: white; padding: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      z-index: 1000;
+      font-family: sans-serif;
     }
-    *{box-sizing:border-box}
-    html, body { height:100%; }
-    body{
-      margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;
-      color:var(--text); background:linear-gradient(180deg,#0f1221,#0b0e1a);
-      min-height:100dvh; display:flex; gap:12px; padding:12px;
-    }
-    #sidebar{
-      width:480px; max-width:100%; background:var(--panel); border:1px solid #222845;
-      border-radius:12px; padding:14px; overflow:auto; max-height:calc(100dvh - 24px);
-    }
-    #map{
-      flex:1; min-width:300px; border:1px solid #222845; border-radius:12px;
-      height:calc(100dvh - 24px); /* assure une carte cliquable sur mobile/desktop */
-    }
-    h1{font-size:18px; margin:0 0 8px 0}
-    .sub{color:var(--muted); font-size:12px; margin-bottom:10px}
-    fieldset{border:1px solid #232947; border-radius:10px; margin:12px 0; padding:12px}
-    legend{padding:0 6px; color:var(--muted); font-size:12px}
-    label{display:block; margin:6px 0}
-    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
-    .btn{
-      background:#1a2040; color:var(--text); border:1px solid #2a315b; padding:8px 10px;
-      border-radius:8px; cursor:pointer; font-weight:600
-    }
-    .btn:hover{background:#1e2550}
-    .btn.danger{border-color:#4b2340; background:#2a1830}
-    .btn.danger:hover{background:#351a36}
-    .btn.secondary{background:#101435; border-color:#2a315b; color:#c7ceef}
-    .type{
-      display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #2a315b;
-      border-radius:8px; cursor:pointer; background:#151935
-    }
-    .type input{margin:0}
-    .dot{width:10px; height:10px; border-radius:50%}
-    .dot.prod{background:var(--prod)} .dot.cons{background:var(--cons)} .dot.sdis{background:var(--sdis)}
-    textarea{
-      width:100%; min-height:90px; resize:vertical; background:#0f1330; color:var(--text);
-      border:1px solid #2a315b; border-radius:8px; padding:8px; font-family:ui-monospace,Consolas,Menlo,monospace
-    }
-    input[type="number"], input[type="text"], input[type="file"]{
-      background:#0f1330; color:var(--text); border:1px solid #2a315b; border-radius:8px; padding:8px;
-    }
-    .hint{color:var(--muted); font-size:12px}
-    .status{padding:10px; border-radius:10px; margin-top:8px; font-weight:700}
-    .ok{background:rgba(93,211,158,.12); border:1px solid rgba(93,211,158,.5); color:var(--accent)}
-    .bad{background:rgba(255,92,122,.12); border:1px solid rgba(255,92,122,.5); color:var(--bad)}
-    .warn{background:rgba(255,176,32,.12); border:1px solid rgba(255,176,32,.5); color:var(--warn)}
-    .legend{display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; margin-top:6px}
-    .small{font-size:12px}
-    .mono{font-family:ui-monospace,Consolas,Menlo,monospace}
-    .pill{display:inline-block; padding:2px 6px; border-radius:999px; border:1px solid #2a315b; color:#c7ceef; font-size:12px}
-    .selected{outline:2px dashed #5dd39e; outline-offset:4px}
-    .loc-toast{
-      position:fixed; left:50%; transform:translateX(-50%);
-      bottom:14px; background:#111634; color:#e7ebff; border:1px solid #2a315b;
-      padding:8px 12px; border-radius:10px; z-index:9999; font-size:13px
-    }
+    .btn { margin: 5px 0; padding: 5px 10px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h1>ACC étendue – Étude PMO</h1>
-    <div class="sub">Centre libre, Emprise producteur, Géolocalisation · 2/10/20 km · IGN/INSEE</div>
-
-    <fieldset>
-      <legend>1) Participants</legend>
-      <div class="hint">Choisis un type puis clique sur la carte pour ajouter un point.</div>
-      <div class="row" role="radiogroup" aria-label="Type de point">
-        <label class="type"><input type="radio" name="ptype" value="consumer" checked><span class="dot cons"></span>Consommateur</label>
-        <label class="type"><input type="radio" name="ptype" value="producer"><span class="dot prod"></span>Producteur</label>
-        <label class="type"><input type="radio" name="ptype" value="sdis"><span class="dot sdis"></span>SDIS</label>
-      </div>
-      <div class="row">
-        <button id="clearAll" class="btn danger">Effacer tous les points</button>
-        <button id="exportCsv" class="btn secondary">Exporter CSV</button>
-        <button id="fitBtn" class="btn secondary">Ajuster la vue</button>
-      </div>
-      <div id="count" class="hint">Aucun point saisi pour l’instant.</div>
-      <div class="small hint">Suppression: Alt+clic ou clic droit, ou sélection puis touche Suppr.</div>
-    </fieldset>
-
-    <fieldset>
-      <legend>2) Import</legend>
-      <div class="hint">Liste <span class="mono">Nom;Lat;Lon;Type</span> — ex. <span class="mono">Usine A;45.76;4.84;consumer</span></div>
-      <textarea id="importArea" placeholder="Nom;45.76;4.84;consumer"></textarea>
-      <div class="row">
-        <button id="importBtn" class="btn">Importer la liste</button>
-      </div>
-      <div class="hint">Emprise producteur (GeoJSON Polygon/MultiPolygon) :</div>
-      <div class="row">
-        <input type="file" id="empriseFile" accept=".geojson,.json">
-        <button id="clearEmprise" class="btn secondary">Retirer l’emprise</button>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>3) Périmètre & modes</legend>
-      <div class="row">
-        <label><input type="radio" name="radius" value="2" checked> 2 km</label>
-        <label><input type="radio" name="radius" value="10"> 10 km</label>
-        <label><input type="radio" name="radius" value="20"> 20 km</label>
-        <label>Perso: <input id="customRadius" type="number" min="0" step="0.1" placeholder="km" style="width:110px"></label>
-      </div>
-      <div class="row">
-        <label class="pill"><input id="showCircles" type="checkbox"> Cercles autour de chaque participant</label>
-        <label class="pill" title="Par défaut, le SDIS n’influence pas la distance"><input id="includeSdis" type="checkbox"> Inclure SDIS</label>
-      </div>
-      <div class="row">
-        <label class="pill"><input id="freeCenter" type="radio" name="mode" value="free" checked> Centre libre</label>
-        <label class="pill"><input id="empriseMode" type="radio" name="mode" value="emprise"> Emprise producteur</label>
-        <label class="pill"><input id="maxDist" type="radio" name="mode" value="pair"> Distance max</label>
-      </div>
-
-      <div id="report" class="status warn">En attente de points…</div>
-      <div id="details" class="small hint"></div>
-    </fieldset>
-
-    <fieldset>
-      <legend>4) Géolocalisation terrain</legend>
-      <div class="row">
-        <button id="locateBtn" class="btn">📍 Me localiser</button>
-        <button id="addMyPos" class="btn secondary" disabled>➕ Ajouter “Ma position” (Consommateur)</button>
-        <button id="trackBtn" class="btn secondary">▶️ Suivi</button>
-      </div>
-      <div class="small hint">Vérifie en direct si ta position est “dans la zone” selon le mode actif.</div>
-      <div id="locStatus" class="small hint"></div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Cartes & données</legend>
-      <div class="hint">Fonds: OSM, OpenTopo, Carto Light, IGN (clé Geoportail). Overlay INSEE.</div>
-      <div class="row">
-        <input id="ignKey" type="text" placeholder="Clé API IGN Géoportail (optionnel)" style="flex:1">
-        <button id="useIgn" class="btn secondary">Activer IGN</button>
-      </div>
-      <div class="row">
-        <button id="toggleInsee" class="btn secondary">Afficher/masquer grille INSEE</button>
-        <button id="printMap" class="btn secondary">Exporter image de la carte</button>
-      </div>
-      <div class="hint small">Place le fichier INSEE ici: <span class="mono">/data/insee_grille.geojson</span></div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Légende</legend>
-      <div class="legend">
-        <span class="dot prod"></span><span>Producteur</span>
-        <span class="dot cons"></span><span>Consommateur</span>
-        <span class="dot sdis"></span><span>SDIS</span>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Rappels officiels (synthèse)</legend>
-      <ul class="small hint" style="margin:0 0 0 16px; padding:0 0 0 6px; list-style:disc">
-        <li>ACC étendue ≤ 20 km = dérogation ministérielle (PMO), en zone rurale (grille INSEE).</li>
-        <li>La distance s’apprécie entre les deux participants les plus éloignés.</li>
-        <li>Le SDIS n’étend pas à lui seul le périmètre.</li>
-      </ul>
-    </fieldset>
+  <div id="map"></div>
+  <div class="control-panel">
+    <select id="pointType">
+      <option value="producteur">Producteur</option>
+      <option value="consommateur">Consommateur</option>
+      <option value="sdis">SDIS</option>
+    </select>
+    <button class="btn" onclick="toggleInsee()">Afficher grille INSEE</button>
+    <button class="btn" onclick="clearPoints()">Effacer points</button>
   </div>
 
-  <div id="map" aria-label="Carte interactive"></div>
-
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // --- Map init ---
-    const map = L.map('map', { zoomControl: true, tap: false }).setView([45.5, 5.7], 8);
+    const map = L.map('map').setView([45.1, 5.75], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
 
-    // Basemaps
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom: 19, attribution:'© OpenStreetMap' }).addTo(map);
-    const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{ maxZoom: 17, attribution:'© OpenTopoMap, © OpenStreetMap' });
-    const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{ maxZoom: 19, attribution:'© Carto, © OpenStreetMap' });
-    let ignLayer = null;
-
-    const baseLayers = {"OSM Standard": osm, "OpenTopoMap": topo, "Carto Light": cartoLight};
-    const overlays = {};
-    L.control.layers(baseLayers, overlays, { position: 'topleft', collapsed: true }).addTo(map);
-
-    // Printer
-    const printer = L.easyPrint({ tileLayer: osm, sizeModes: ['A4Portrait','A4Landscape'], filename: 'acc_etendue_carte', exportOnly: true, hideControlContainer: false }).addTo(map);
-
-    // --- State ---
-    const points = []; // {id,name,lat,lon,type,marker}
-    const circles = [];
-    let idSeq = 1;
-    let selectedPointId = null;
-    let accCircle = null, accCenterMarker = null;
-
-    // Emprise
-    let empriseLayer = null;
-    let empriseBufferLayer = null;
-
-    // INSEE
+    let pointsLayer = L.layerGroup().addTo(map);
     let inseeLayer = null;
     let inseeVisible = false;
 
-    // Geolocation
-    let myPosMarker = null;
-    let myAccCircle = null;
-    let watchId = null;
-
-    // --- UI elements ---
-    const countEl = document.getElementById('count');
-    const reportEl = document.getElementById('report');
-    const detailsEl = document.getElementById('details');
-    const customRadiusEl = document.getElementById('customRadius');
-    const showCirclesEl = document.getElementById('showCircles');
-    const includeSdisEl = document.getElementById('includeSdis');
-    const locStatusEl = document.getElementById('locStatus');
-
-    const modeFreeEl = document.getElementById('freeCenter');
-    const modeEmpriseEl = document.getElementById('empriseMode');
-    const modePairEl = document.getElementById('maxDist');
-
-    function toast(msg, ms=2200){
-      const t = document.createElement('div');
-      t.className='loc-toast';
-      t.textContent = msg;
-      document.body.appendChild(t);
-      setTimeout(()=>{ t.remove(); }, ms);
+    function selectedType() {
+      return document.getElementById('pointType').value;
     }
 
-    // --- Helpers ---
-    function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
-    function selectedRadiusKm(){
-      const v = customRadiusEl.value.trim();
-      if(v !== '' && !isNaN(v)) return Math.max(0, parseFloat(v));
-      return parseFloat(document.querySelector('input[name="radius"]:checked').value);
+    function addPoint(lat, lng, type) {
+      const colors = {
+        producteur: 'green',
+        consommateur: 'blue',
+        sdis: 'red'
+      };
+      const marker = L.circleMarker([lat, lng], {
+        radius: 8,
+        color: colors[type] || 'black',
+        fillOpacity: 0.6
+      }).bindPopup(`${type} (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+      marker.addTo(pointsLayer);
     }
-    function selectedMode(){ return document.querySelector('input[name="mode"]:checked').value; }
-    function typeColor(t){ if(t==='producer') return 'var(--prod)'; if(t==='consumer') return 'var(--cons)'; return 'var(--sdis)'; }
-    function humanType(t){ return t==='producer'?'Producteur':t==='consumer'?'Consommateur':'SDIS'; }
-    function updateCount(){
-      const n = points.length;
-      countEl.textContent = n ? `${n} point${n>1?'s':''} saisi${n>1?'s':''}.` : 'Aucun point saisi pour l’instant.';
+
+    map.on('click', e => {
+      addPoint(e.latlng.lat, e.latlng.lng, selectedType());
+    });
+
+    function clearPoints() {
+      pointsLayer.clearLayers();
     }
-    function fitToData(){
-      const layers = [];
-      points.forEach(p=>layers.push(p.marker));
-      if(empriseLayer) layers.push(empriseLayer);
-      if(myPosMarker) layers.push(myPosMarker);
-      if(!layers.length) return;
-      const group = new L.featureGroup(layers);
-      map.fitBounds(group.getBounds().pad(0.2));
-    }
-    function haversineKm(lat1, lon1, lat2, lon2){
-      const R = 6371;
-      const toRad = d => d * Math.PI / 180;
-      const dLat = toRad(lat2 - lat1);
-      const dLon = toRad(lon2 - lon1);
-      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-      return 2 * R * Math.asin(Math.sqrt(a));
-    }
-    function computeMaxDistance(includeSdis=false){
-      const eligible = points.filter(p => includeSdis ? true : (p.type!=='sdis'));
-      if(eligible.length < 2) return {max:0, pair:null, considered:eligible.length};
-      let max = -1, pair = null;
-      for(let i=0;i<eligible.length;i++){
-        for(let j=i+1;j<eligible.length;j++){
-          const a = eligible[i], b = eligible[j];
-          const d = haversineKm(a.lat, a.lon, b.lat, b.lon);
-          if(d > max){ max = d; pair = [a,b]; }
-        }
-      }
-      return {max, pair, considered:eligible.length};
-    }
-    function clearCircles(){ circles.forEach(c => map.removeLayer(c)); circles.length = 0; }
-    function refreshCircles(){
-      clearCircles();
-      if(!showCirclesEl.checked) return;
-      const r = selectedRadiusKm() * 1000;
-      points.forEach(p=>{
-        const c = L.circle([p.lat, p.lon], { radius: r, color: typeColor(p.type), weight:1, opacity:0.9, fillOpacity:0.06 }).addTo(map);
-        circles.push(c);
-      });
-    }
-    function showAccCircle(center, radiusKm, color='#5dd39e'){
-      if(accCircle){ map.removeLayer(accCircle); accCircle = null; }
-      if(accCenterMarker){ map.removeLayer(accCenterMarker); accCenterMarker = null; }
-      accCircle = L.circle(center, { radius: radiusKm * 1000, color, weight:2, opacity:0.9, fillOpacity:0.05 }).addTo(map);
-      accCenterMarker = L.circleMarker(center, {radius:5, color, weight:2, fillOpacity:0.6}).addTo(map);
-    }
-    function clearAccCircle(){
-      if(accCircle){ map.removeLayer(accCircle); accCircle = null; }
-      if(accCenterMarker){ map.removeLayer(accCenterMarker); accCenterMarker = null; }
-    }
-    function projectLocal(pointsLL){
-      const lat0 = pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length;
-      const lon0 = pointsLL.reduce((s,p)=>s+p.lon,0)/pointsLL.length;
-      const pts = pointsLL.map(p=>{
-        const x = (p.lon - lon0) * 111.32 * Math.cos(lat0*Math.PI/180);
-        const y = (p.lat - lat0) * 111.32;
-        return {x, y, ref:p};
-      });
-      return {lat0, lon0, pts};
-    }
-    function unprojectLocal(lat0, lon0, x, y){
-      const lat = lat0 + y/111.32;
-      const lon = lon0 + x/(111.32 * Math.cos(lat0*Math.PI/180));
-      return {lat, lon};
-    }
-    function mec(points){ // Welzl
-      function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
-      function circle2(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:dist(a,b)/2}; }
-      function circle3(a,b,c){
-        const A=b.x-a.x, B=b.y-a.y, C=c.x-a.x, D=c.y-a.y;
-        const E=A*(a.x+b.x)+B*(a.y+b.y);
-        const F=C*(a.x+c.x)+D*(a.y+c.y);
-        const G=2*(A*(c.y-b.y)-B*(c.x-b.x));
-        if(Math.abs(G)<1e-12){
-          const candidates=[circle2(a,b),circle2(a,c),circle2(b,c)];
-          let best=null;
-          for(const cc of candidates){
-            if([a,b,c].every(p=>dist(p,cc)<=cc.r+1e-9)) if(!best||cc.r<best.r) best=cc;
-          }
-          return best;
+
+    async function toggleInsee() {
+      if (inseeLayer) {
+        if (inseeVisible) {
+          map.removeLayer(inseeLayer);
+          inseeVisible = false;
         } else {
-          const cx=(D*E-B*F)/G, cy=(A*F-C*E)/G, r=dist({x:cx,y:cy},a);
-          return {x:cx,y:cy,r};
+          inseeLayer.addTo(map);
+          inseeVisible = true;
         }
-      }
-      function isIn(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
-      function welzl(P, R, n){
-        if(n===0 || R.length===3){
-          if(R.length===0) return {x:0,y:0,r:0};
-          if(R.length===1) return {x:R[0].x,y:R[0].y,r:0};
-          if(R.length===2) return circle2(R[0],R[1]);
-          return circle3(R[0],R[1],R[2]);
-        }
-        const p = P[n-1];
-        const c = welzl(P, R, n-1);
-        if(isIn(c,p)) return c;
-        return welzl(P, R.concat([p]), n-1);
-      }
-      const P = points.slice();
-      for(let i=P.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [P[i],P[j]]=[P[j],P[i]]; }
-      return welzl(P, [], P.length);
-    }
-
-    // --- Emprise ---
-    function clearEmprise(){
-      if(empriseLayer){ map.removeLayer(empriseLayer); empriseLayer = null; }
-      if(empriseBufferLayer){ map.removeLayer(empriseBufferLayer); empriseBufferLayer = null; }
-    }
-    function loadEmpriseGeoJSON(geojson){
-      clearEmprise();
-      empriseLayer = L.geoJSON(geojson, { style: {color:'#ff7a00', weight:2, fillOpacity:0.1} }).addTo(map);
-      fitToData();
-      refreshReport();
-    }
-    function refreshEmpriseBuffer(){
-      if(empriseBufferLayer){ map.removeLayer(empriseBufferLayer); empriseBufferLayer = null; }
-      if(!empriseLayer) return;
-      const rKm = selectedRadiusKm();
-      const gj = empriseLayer.toGeoJSON();
-      const buffered = turf.buffer(gj, rKm, {units:'kilometers'});
-      empriseBufferLayer = L.geoJSON(buffered, { style:{color:'#5dd39e', weight:2, dashArray:'6 4', fillOpacity:0.05} }).addTo(map);
-    }
-    function pointInBuffer(lat, lon){
-      if(!empriseBufferLayer) return false;
-      const gjBuffer = empriseBufferLayer.toGeoJSON();
-      const pt = turf.point([lon, lat]);
-      let contained = false;
-      turf.flattenEach(gjBuffer, feat=>{
-        if(turf.booleanPointInPolygon(pt, feat)) contained = true;
-      });
-      return contained;
-    }
-    function allEligiblePointsInsideEmpriseBuffer(includeSdis=false){
-      if(!empriseLayer || !empriseBufferLayer) return {ok:false, total:0, inside:0};
-      const eligible = points.filter(p => includeSdis ? true : p.type!=='sdis');
-      let inside=0;
-      for(const p of eligible){ if(pointInBuffer(p.lat, p.lon)) inside++; }
-      return {ok: inside === eligible.length && eligible.length>0, total:eligible.length, inside};
-    }
-
-    // --- Report ---
-    function refreshReport(){
-      const rKm = selectedRadiusKm();
-      const includeSdis = includeSdisEl.checked;
-      const mode = selectedMode();
-
-      clearAccCircle();
-      if(mode==='emprise'){ refreshEmpriseBuffer(); }
-
-      const eligible = points.filter(p => includeSdis ? true : p.type!=='sdis');
-
-      if(points.length === 0 && mode!=='emprise'){
-        reportEl.className = 'status warn';
-        reportEl.textContent = 'En attente de points…';
-        detailsEl.textContent = '';
-        updateLocWithin();
         return;
       }
 
-      if(mode==='emprise'){
-        if(!empriseLayer){
-          reportEl.className = 'status warn';
-          reportEl.textContent = 'Importe une emprise producteur (GeoJSON) pour ce mode.';
-          detailsEl.textContent = 'Formats: Polygon/MultiPolygon (EPSG:4326).';
-          updateLocWithin();
-          return;
-        }
-        if(eligible.length===0){
-          reportEl.className = 'status warn';
-          reportEl.textContent = 'Aucun participant éligible à vérifier.';
-          detailsEl.textContent = '';
-          updateLocWithin();
-          return;
-        }
-        const res = allEligiblePointsInsideEmpriseBuffer(includeSdis);
-        const ok = res.ok;
-        reportEl.className = 'status ' + (ok ? 'ok' : 'bad');
-        reportEl.textContent = (ok ? 'Conforme (emprise + buffer)' : 'Non conforme (emprise + buffer)') +
-          ` — rayon: ${rKm} km · ${res.inside}/${res.total} point(s) dans le buffer`;
-        detailsEl.innerHTML = 'Buffer = emprise dilatée de ' + rKm + ' km.';
-        updateLocWithin();
-        return;
-      }
-
-      if(eligible.length < 2){
-        reportEl.className = 'status warn';
-        reportEl.textContent = 'Ajoute au moins deux participants éligibles.';
-        detailsEl.textContent = 'Le SDIS est exclu par défaut.';
-        updateLocWithin();
-        return;
-      }
-
-      if(mode==='free'){
-        const {lat0, lon0, pts} = projectLocal(eligible.map(p=>({lat:p.lat, lon:p.lon})));
-        const c = mec(pts);
-        const centerLL = unprojectLocal(lat0, lon0, c.x, c.y);
-        const ok = c.r <= rKm + 1e-9;
-        reportEl.className = 'status ' + (ok ? 'ok' : 'bad');
-        reportEl.textContent = (ok ? 'Conforme (centre libre)' : 'Non conforme (centre libre)') +
-          ` — rayon requis: ${c.r.toFixed(2)} km (seuil: ${rKm} km)`;
-        detailsEl.innerHTML = `Centre suggéré: <span class="mono">${centerLL.lat.toFixed(5)}, ${centerLL.lon.toFixed(5)}</span> · Participants: ${eligible.length}`;
-        showAccCircle([centerLL.lat, centerLL.lon], c.r, ok ? '#5dd39e' : '#ff5c7a');
-        updateLocWithin(centerLL.lat, centerLL.lon, c.r);
-        return;
-      }
-
-      if(mode==='pair'){
-        const {max, pair} = computeMaxDistance(includeSdis);
-        const ok = max <= rKm + 1e-9;
-        reportEl.className = 'status ' + (ok ? 'ok' : 'bad');
-        reportEl.textContent = (ok ? 'Conforme' : 'Non conforme') + ` — distance maximale: ${max.toFixed(2)} km (seuil: ${rKm} km)`;
-        if(pair){
-          const [a,b] = pair;
-          detailsEl.innerHTML = `Participants les plus éloignés: <span class="mono">${a.name}</span> (${humanType(a.type)}) ↔ <span class="mono">${b.name}</span> (${humanType(b.type)}).`;
-        } else { detailsEl.textContent = ''; }
-        updateLocWithin();
-        return;
-      }
-    }
-
-    function setSelected(id){
-      selectedPointId = id;
-      points.forEach(p=>{
-        const el = p.marker.getElement();
-        if(el) el.classList.toggle('selected', p.id===id);
-      });
-    }
-
-    function addPoint(lat, lon, type, name){
-      const id = idSeq++;
-      const label = name || `${humanType(type)} ${id}`;
-      const marker = L.circleMarker([lat, lon], { radius:7, color:typeColor(type), weight:2, fillColor:typeColor(type), fillOpacity:0.3 }).addTo(map);
-      marker.bindPopup(`
-        <strong>${label}</strong><br>${humanType(type)}<br>
-        <span class="mono">${lat.toFixed(5)}, ${lon.toFixed(5)}</span><br>
-        <div style="margin-top:6px;display:flex;gap:6px;">
-          <button data-id="${id}" class="popup-del">Supprimer</button>
-          <button data-id="${id}" class="popup-rename">Renommer</button>
-        </div>
-      `, {autoPan:true});
-      const entry = {id, name:label, lat, lon, type, marker};
-
-      // Interaction: clic, alt+clic, clic droit
-      marker.on('click', (e)=>{
-        setSelected(id);
-        if(e.originalEvent && e.originalEvent.altKey){ removePoint(id); return; }
-      });
-      marker.on('contextmenu', ()=>{ removePoint(id); });
-      marker.on('popupopen', e=>{
-        const root = e.popup.getElement();
-        const del = root.querySelector('.popup-del');
-        const ren = root.querySelector('.popup-rename');
-        if(del) del.addEventListener('click', ()=>{ removePoint(id); map.closePopup(); });
-        if(ren) ren.addEventListener('click', ()=>{
-          const nn = prompt('Nouveau nom pour ce point:', entry.name);
-          if(nn && nn.trim()){
-            entry.name = nn.trim();
-            marker.setPopupContent(`
-              <strong>${entry.name}</strong><br>${humanType(entry.type)}<br>
-              <span class="mono">${entry.lat.toFixed(5)}, ${entry.lon.toFixed(5)}</span><br>
-              <div style="margin-top:6px;display:flex;gap:6px;">
-                <button data-id="${id}" class="popup-del">Supprimer</button>
-                <button data-id="${id}" class="popup-rename">Renommer</button>
-              </div>
-            `);
-          }
-        });
-      });
-
-      points.push(entry);
-      updateCount(); refreshCircles(); refreshReport();
-    }
-
-    function removePoint(id){
-      const idx = points.findIndex(p=>p.id===id);
-      if(idx>=0){
-        map.removeLayer(points[idx].marker);
-        points.splice(idx,1);
-        if(selectedPointId===id) selectedPointId=null;
-        updateCount(); refreshCircles(); refreshReport();
-      }
-    }
-
-    // --- Create points: robust handlers (desktop + mobile) ---
-    // Leaflet 'click' suffit normalement, mais on ajoute 'tap' et 'touchend' pour iOS
-    map.on('click', (e)=>{ addPoint(e.latlng.lat, e.latlng.lng, selectedType()); });
-    map.on('touchend', (e)=>{
-      // quand touchend déclenche sans 'click' (certains iOS)
-      if(e.latlng){ addPoint(e.latlng.lat, e.latlng.lng, selectedType()); }
-    });
-
-    // --- Keyboard delete ---
-    window.addEventListener('keydown', (e)=>{
-      if((e.key==='Delete' || e.key==='Backspace') && selectedPointId!=null){ e.preventDefault(); removePoint(selectedPointId); }
-    });
-
-    // --- Controls ---
-    document.getElementById('clearAll').addEventListener('click', ()=>{
-      points.forEach(p=>map.removeLayer(p.marker)); points.length = 0;
-      clearCircles(); clearAccCircle(); setSelected(null); updateCount(); refreshReport();
-    });
-    document.getElementById('fitBtn').addEventListener('click', fitToData);
-
-    document.getElementById('importBtn').addEventListener('click', ()=>{
-      const raw = document.getElementById('importArea').value.trim(); if(!raw) return;
-      const lines = raw.split(/\r?\n/); let ok=0, fail=0;
-      lines.forEach(line=>{
-        if(!line.trim()) return;
-        const parts = line.split(';').map(s=>s.trim());
-        if(parts.length < 4){ fail++; return; }
-        const [name, latS, lonS, typeS] = parts;
-        const lat = parseFloat(latS), lon = parseFloat(lonS);
-        let t = (typeS||'').toLowerCase();
-        if(['consumer','consommateur','cons'].includes(t)) t='consumer';
-        else if(['producer','producteur','prod'].includes(t)) t='producer';
-        else if(['sdis'].includes(t)) t='sdis';
-        else { fail++; return; }
-        if(isNaN(lat) || isNaN(lon) || lat<-90 || lat>90 || lon<-180 || lon>180){ fail++; return; }
-        addPoint(lat, lon, t, name); ok++;
-      });
-      if(ok){ fitToData(); }
-      if(fail){ detailsEl.innerHTML = `Import: ${ok} ligne(s) ajoutée(s), ${fail} rejetée(s). <span class="hint">Format: <span class="mono">Nom;Lat;Lon;Type</span></span>`; }
-    });
-
-    document.getElementById('exportCsv').addEventListener('click', ()=>{
-      if(points.length===0) return;
-      const header = 'name;lat;lon;type';
-      const rows = points.map(p=>[p.name.replace(/;/g, ','), p.lat.toFixed(6), p.lon.toFixed(6), p.type].join(';'));
-      const csv = [header, ...rows].join('\n');
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'acc_etendue_points.csv'; a.click(); URL.revokeObjectURL(url);
-    });
-
-    // Emprise import
-    document.getElementById('empriseFile').addEventListener('change', async (e)=>{
-      const f = e.target.files[0]; if(!f) return;
-      const txt = await f.text();
-      try{
-        const gj = JSON.parse(txt);
-        let ok = false;
-        L.geoJSON(gj, { onEachFeature: (feat)=>{ if(['Polygon','MultiPolygon'].includes(feat.geometry.type)) ok = true; } });
-        if(!ok){ alert('GeoJSON doit contenir un Polygon ou MultiPolygon (EPSG:4326).'); return; }
-        loadEmpriseGeoJSON(gj);
-      }catch(err){ alert('GeoJSON invalide.'); }
-    });
-    document.getElementById('clearEmprise').addEventListener('click', ()=>{ clearEmprise(); refreshReport(); });
-
-    // INSEE overlay
-    async function toggleInsee(){
-      if(inseeLayer){
-        if(inseeVisible){ map.removeLayer(inseeLayer); inseeVisible=false; }
-        else { inseeLayer.addTo(map); inseeVisible=true; }
-        return;
-      }
-      try{
-        const resp = await fetch('./data/insee_grille.geojson');
-        if(!resp.ok) throw new Error('Fichier introuvable');
+      try {
+        const resp = await fetch('./data/insee_grille.geojson', { cache: 'no-cache' });
+        if (!resp.ok) throw new Error('Fichier INSEE introuvable');
         const data = await resp.json();
+
         inseeLayer = L.geoJSON(data, {
           style: f => {
-            const z = (f.properties?.zone||'').toLowerCase();
-            let color = '#8888ff';
-            if(z.includes('rural')) color = '#5dd39e';
-            else if(z.includes('peri')) color = '#ffb020';
-            else if(z.includes('urb')) color = '#ff5c7a';
-            return {color, weight:1, fillOpacity:0.05};
+            const z = (f.properties?.zone || '').toLowerCase();
+            let color = '#888';
+            if (z.includes('rur')) color = '#5dd39e';
+            else if (z.includes('peri')) color = '#ffb020';
+            else if (z.includes('urb')) color = '#ff5c7a';
+            return { color, weight: 1, fillOpacity: 0.05 };
+          },
+          onEachFeature: (feat, layer) => {
+            const props = feat.properties || {};
+            const zone = props.zone || '—';
+            const nom = props.nom || props.name || 'Commune';
+            const code = props.code_commune || props.code || '—';
+            layer.bindPopup(`<strong>${nom}</strong><br>Code INSEE: ${code}<br>Zone: ${zone}`);
           }
         }).addTo(map);
+
         inseeVisible = true;
-      }catch(e){ alert('Impossible de charger /data/insee_grille.geojson'); }
-    }
-    document.getElementById('toggleInsee').addEventListener('click', toggleInsee);
-
-    // IGN activation
-    document.getElementById('useIgn').addEventListener('click', ()=>{
-      const key = document.getElementById('ignKey').value.trim();
-      if(!key){ alert('Renseigne ta clé API IGN Geoportail.'); return; }
-      if(ignLayer) map.removeLayer(ignLayer);
-      ignLayer = L.tileLayer(`https://wxs.ign.fr/${key}/geoportail/wmts?layer=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix={z}&TileCol={x}&TileRow={y}`, {
-        maxZoom: 19, attribution: '© IGN - Géoportail'
-      });
-      ignLayer.addTo(map);
-      toast('Fond IGN activé');
-    });
-
-    // Export image
-    document.getElementById('printMap').addEventListener('click', ()=>{ printer.printMap('A4Landscape', 'acc_etendue_carte'); });
-
-    // --- Géolocalisation ---
-    function setMyPosition(lat, lon, acc){
-      // Marker position
-      if(!myPosMarker){
-        myPosMarker = L.marker([lat, lon], {title:'Ma position'}).addTo(map);
-      } else {
-        myPosMarker.setLatLng([lat, lon]);
-      }
-      // Accuracy circle
-      if(!myAccCircle){
-        myAccCircle = L.circle([lat, lon], {radius:acc||0, color:'#2ea8ff', weight:1, fillOpacity:0.08}).addTo(map);
-      } else {
-        myAccCircle.setLatLng([lat, lon]); myAccCircle.setRadius(acc||0);
+      } catch (e) {
+        alert('Erreur lors du chargement de la grille INSEE.');
       }
     }
-
-    function updateLocWithin(centerLat=null, centerLon=null, centerRkm=null){
-      if(!myPosMarker){ locStatusEl.textContent = ''; return; }
-      const pos = myPosMarker.getLatLng();
-      const mode = selectedMode();
-      const rKm = selectedRadiusKm();
-      let within = false, msg = '';
-
-      if(mode==='emprise'){
-        within = !!pointInBuffer(pos.lat, pos.lng);
-        msg = within ? '✅ Votre position est dans le buffer emprise' : '❌ Hors buffer emprise';
-      } else if(mode==='free' && centerLat!=null){
-        const d = haversineKm(pos.lat, pos.lng, centerLat, centerLon);
-        within = d <= centerRkm + 1e-6;
-        msg = within ? `✅ Dans le cercle optimal (${d.toFixed(2)} km du centre)` : `❌ Hors cercle optimal (${d.toFixed(2)} km)`;
-      } else if(mode==='pair'){
-        msg = 'ℹ️ Mode distance max: la position personnelle n’est pas utilisée pour le calcul.';
-        within = false;
-      } else {
-        msg = 'ℹ️ Ajoute des participants pour évaluer la zone.';
-      }
-      locStatusEl.textContent = msg;
-    }
-
-    document.getElementById('locateBtn').addEventListener('click', ()=>{
-      if(!navigator.geolocation){ alert('Géolocalisation non supportée.'); return; }
-      navigator.geolocation.getCurrentPosition(
-        (pos)=>{
-          const {latitude, longitude, accuracy} = pos.coords;
-          setMyPosition(latitude, longitude, accuracy);
-          map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
-          toast('Position trouvée');
-          refreshReport(); // met à jour "dans la zone"
-          document.getElementById('addMyPos').disabled = false;
-        },
-        (err)=>{ alert('Géolocalisation refusée ou indisponible.'); },
-        { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
-      );
-    });
-
-    document.getElementById('addMyPos').addEventListener('click', ()=>{
-      if(!myPosMarker) return;
-      const {lat, lng} = myPosMarker.getLatLng();
-      addPoint(lat, lng, 'consumer', 'Prospect (ma position)');
-      toast('Prospect ajouté depuis votre position');
-    });
-
-    document.getElementById('trackBtn').addEventListener('click', (e)=>{
-      if(!navigator.geolocation){ alert('Géolocalisation non supportée.'); return; }
-      if(watchId){
-        navigator.geolocation.clearWatch(watchId); watchId = null;
-        e.target.textContent = '▶️ Suivi'; toast('Suivi arrêté');
-        return;
-      }
-      watchId = navigator.geolocation.watchPosition(
-        (pos)=>{
-          const {latitude, longitude, accuracy} = pos.coords;
-          setMyPosition(latitude, longitude, accuracy);
-          updateLocWithin(); // re-évalué après refreshReport
-        },
-        (err)=>{ toast('Erreur géolocalisation'); },
-        { enableHighAccuracy:true, maximumAge:5000 }
-      );
-      e.target.textContent = '⏸️ Stop'; toast('Suivi démarré');
-    });
-
-    // --- React to parameter changes ---
-    document.querySelectorAll('input[name="radius"]').forEach(r=>{ r.addEventListener('change', ()=>{ refreshCircles(); refreshReport(); }); });
-    customRadiusEl.addEventListener('input', ()=>{ refreshCircles(); refreshReport(); });
-    showCirclesEl.addEventListener('change', ()=>{ refreshCircles(); });
-    includeSdisEl.addEventListener('change', ()=>{ refreshReport(); });
-    [modeFreeEl, modeEmpriseEl, modePairEl].forEach(el=> el.addEventListener('change', ()=>{ refreshReport(); }));
-
-    // --- Initial hint ---
-    // Rien par défaut; ajoute des points ou active la géolocalisation.
   </script>
 </body>
 </html>
