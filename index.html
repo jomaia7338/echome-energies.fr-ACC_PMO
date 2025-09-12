@@ -31,21 +31,21 @@
     #searchResults ul{margin:6px 0 0 16px;padding:0}
     #searchResults li{margin:2px 0}
     #searchResults a{text-decoration:none;border-bottom:1px dashed #999;color:#111}
-    #searchResults a:hover{color:#000}
-    /* Compact header & advanced toggle */
-    body.compact header{padding:6px 8px}
-    body.compact .tool{padding:6px}
-    body.compact .tool label{margin-bottom:4px}
-    body.compact .toolbar{grid-template-columns:repeat(3,minmax(180px,1fr));gap:6px}
-    .tool.advanced{ /* visible par défaut */ }
-    body.compact .tool.advanced{display:none}
-    body.compact.show-advanced .tool.advanced{display:block}
-    @media (max-width: 1100px){ .toolbar{grid-template-columns:1fr 1fr} }
-    @media (max-width: 640px){ .toolbar{grid-template-columns:1fr} }
+    rand header */
+    .brand{display:flex;align-items:center;gap:10px;margin:4px 0 6px}
+    .brand svg{height:32px;width:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+    .brand .brand-text{font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:.3px;color:var(--ink)}
   </style>
 </head>
 <body>
   <header>
+    <div class="brand" role="img" arÉnergies">
+      <svg viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
+        <text x="60" y="19" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="14" fill="#ffffff">ECHOME</text>
+      </svg>
+      <span class="brand-text">Echome Énergies</span>
+    </div>
     <h1>ACC – Vérification d’éligibilité (centre libre)</h1>
     <div class="topbar">
       <button id="toggleBar" class="btn" title="Réduire/agrandir la barre">↕ Réduire la barre</button>
