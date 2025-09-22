@@ -66,7 +66,11 @@
       .print-header .left{display:flex;align-items:center;gap:8px}
       .print-header .brand svg{height:26px}
       .print-header .title{font-family:'Montserrat',sans-serif;font-weight:700}
-      #map{ height:auto !important; min-height:0; margin:0; border:0 }
+      #map{ height:170mm !important; min-height:170mm !important; margin:0; border:0 }
+      /* Désactive les transforms pour éviter la carte blanche à l'impression */
+      .leaflet-pane, .leaflet-map-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow{ transform:none !important; animation:none !important; }
+      .leaflet-container{ background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .leaflet-tile{ filter:none !important; }
       .legend-overlay{ display:none; }
       .print-legend{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;margin-top:8px;font-size:12px}
     }
@@ -368,9 +372,24 @@
 
       // ====== Impression / Export PDF ======
       function updatePrintHeader(){ const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1'; const D=currentDiameter(); const inc=includeSdis()?'Oui':'Non'; const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length, ns=participants.filter(p=>p.type==='sdis').length; document.getElementById('printMeta').textContent = `${name} — D=${D} km — SDIS inclus: ${inc} — Points: ${n} (Prod ${np}, Cons ${nc}, SDIS ${ns}) — ${fmtDate(new Date())}`; }
-      document.getElementById('printBtn').onclick = ()=>{ updatePrintHeader(); setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } window.print(); }, 50); };
-      window.addEventListener('beforeprint', ()=>{ updatePrintHeader(); setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 50); });
-      window.addEventListener('afterprint', ()=>{ setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 100); });
+      async function ensureTilesReady(timeout=2000){
+        return new Promise(resolve=>{
+          const start=Date.now();
+          const tiles=[...document.querySelectorAll('.leaflet-tile')];
+          if(tiles.length===0){ resolve(); return; }
+          let remaining=tiles.length; const done=()=>{ if(--remaining<=0 || (Date.now()-start)>timeout) resolve(); };
+          tiles.forEach(img=>{ if(img.complete && img.naturalWidth>0){ done(); } else { img.addEventListener('load',done,{once:true}); img.addEventListener('error',done,{once:true}); } });
+          setTimeout(resolve, timeout);
+        });
+      }
+      document.getElementById('printBtn').onclick = async ()=>{
+        updatePrintHeader();
+        try{ map.invalidateSize(); }catch(_){ }
+        await ensureTilesReady(2000);
+        window.print();
+      };
+      window.addEventListener('beforeprint', async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(1500); }); setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 50); });
+      window.addEventListener('afterprint', ()=>{ setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 100); }); }catch(_){ } }, 100); });
 
       // UI — micro-barre
       document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display = (v==='custom')?'inline-block':'none'; refreshACC(); });
