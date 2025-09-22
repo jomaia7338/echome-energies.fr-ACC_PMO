@@ -55,7 +55,14 @@
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 
     /* Ratio (échelle 1:n) control */
-    .leaflet-control.ratio-control{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px}
+    .leaflet-control.ratio-control{
+      background:rgba(255,255,255,.95);
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:4px 8px;
+      font-size:12px;
+      z-index:1000; /* important */
+    }
 
     /* PRINT */
     .print-header{display:none}
@@ -255,9 +262,9 @@
       osm.addTo(map);
       L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
 
-      // Contrôle d'échelle numérique (1:n) ~96 DPI
+      /* Contrôle d'échelle “1:n” — ajout après whenReady */
       const RatioControl = L.Control.extend({
-        options: { position: 'bottomright' },
+        options: { position: 'topright' },
         onAdd: function(map){
           const div = L.DomUtil.create('div','leaflet-control ratio-control');
           this._div = div; this._map = map;
@@ -271,12 +278,13 @@
         _update: function(){
           const center = this._map.getCenter();
           const zoom = this._map.getZoom();
+          if (zoom == null) { this._div.textContent = 'Échelle —'; return; }
           const metersPerPixel = 156543.03392 * Math.cos(center.lat * Math.PI/180) / Math.pow(2, zoom);
-          const denom = Math.max(1, Math.round(metersPerPixel / 0.0002645833333)); // 96 DPI (px ~ 0.26458 mm)
+          const denom = Math.max(1, Math.round(metersPerPixel / 0.0002645833333)); // ~96 DPI
           this._div.textContent = 'Échelle ~ 1:' + denom.toLocaleString('fr-FR');
         }
       });
-      map.addControl(new RatioControl());
+      map.whenReady(() => { map.addControl(new RatioControl()); });
 
       function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height = h + 'px'; try{ map.invalidateSize(); }catch(_){ } }
       window.addEventListener('resize', layout); setTimeout(layout, 50);
@@ -406,8 +414,6 @@
 
       // Optionnel : export PNG (capture rapide via canvas)
       document.getElementById('exportPngBtn').onclick = async ()=>{
-        // Astuce simple : utiliser leaflet-easyPrint ou html2canvas si dispo.
-        // Ici, on indique juste la méthode à brancher si tu ajoutes html2canvas plus tard.
         alert("Pour l'export PNG, ajoute html2canvas et je te branche la capture du #map en 10 lignes.");
       };
 
@@ -439,40 +445,80 @@
       document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } else { clearTimeout(searchTimer); searchTimer=setTimeout(()=>{ const q=(e.target.value||'').trim(); if(q) searchAddress(q); }, 500); } });
       document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); const lat=parseFloat(a.getAttribute('data-lat')), lng=parseFloat(a.getAttribute('data-lng')), label=a.getAttribute('data-label-raw')||''; addPoint(lat,lng, selectedType(), label); map.setView([lat,lng], 15); });
 
-      // ====== Chargement SDIS Isère (Overpass/OSM) ======
+      // ====== Chargement SDIS Isère (Overpass/OSM) — version robuste ======
       async function loadSdis38(){
-        const q = `[out:json][timeout:40];
-rel["admin_level"="6"]["name"="Isère"];
+        const queries = [
+`[out:json][timeout:60];
+(
+  rel["admin_level"="6"]["ref:INSEE"="38"];
+  rel["admin_level"="6"]["name"="Isère"];
+  rel["admin_level"="6"]["name"="Isere"];
+);
 map_to_area->.a;
 (
   node["amenity"="fire_station"](area.a);
   way["amenity"="fire_station"](area.a);
   relation["amenity"="fire_station"](area.a);
 );
-out center tags;`;
-        const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
+out center tags;`,
+`[out:json][timeout:60];
+(
+  node["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  way["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  relation["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+);
+out center tags;`
+        ];
+        const endpoints = [
+          'https://overpass-api.de/api/interpreter',
+          'https://overpass.kumi.systems/api/interpreter',
+          'https://lz4.overpass-api.de/api/interpreter'
+        ];
         const btn = document.getElementById('loadSdis38');
         const prev = btn.textContent; btn.disabled = true; btn.textContent = 'Chargement…';
-        try{
-          const r = await fetch(url, {headers:{'Accept':'application/json'}});
-          if(!r.ok) throw new Error('Overpass API');
-          const j = await r.json();
+
+        function parseAndAdd(j){
           const els = Array.isArray(j.elements)? j.elements : [];
           let ok=0, skip=0; const seen = new Set();
           for(const el of els){
-            let lat=null, lng=null; if(el.type==='node'){ lat=el.lat; lng=el.lon; } else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
-            if(lat==null || lng==null) { continue; }
-            const tags = el.tags || {}; const label = tags.name || tags['addr:place'] || tags['addr:city'] || 'Centre SDIS';
+            let lat=null, lng=null;
+            if(el.type==='node'){ lat=el.lat; lng=el.lon; }
+            else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
+            if(lat==null || lng==null) continue;
+            const tags = el.tags || {};
+            const label = tags.name || tags['addr:place'] || tags['addr:city'] || 'Centre SDIS';
             const key = `${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
             if(seen.has(key)) { skip++; continue; }
             seen.add(key);
-            addPoint(lat,lng,'sdis', label);
+            addPoint(lat, lng, 'sdis', label);
             ok++;
           }
-          tSet(statusEl,`SDIS Isère (OSM) : ${ok} ajoutés${skip?`, ${skip} doublons ignorés`:''}.`);
+          return {ok, skip};
+        }
+
+        let added = 0, skipped = 0, success = false, lastErr = null;
+
+        try{
+          for(const q of queries){
+            if(success) break;
+            for(const ep of endpoints){
+              try{
+                const r = await fetch(ep + '?data=' + encodeURIComponent(q), {headers:{'Accept':'application/json'}});
+                if(!r.ok) throw new Error('HTTP '+r.status);
+                const j = await r.json();
+                const {ok, skip} = parseAndAdd(j);
+                if(ok>0){ added += ok; skipped += skip; success = true; break; }
+              }catch(e){ lastErr = e; /* on tente l’endpoint suivant */ }
+            }
+          }
+          if(success){
+            tSet(statusEl, `SDIS Isère (OSM) : ${added} ajoutés${skipped?`, ${skipped} doublons ignorés`:''}.`);
+          }else{
+            tSet(statusEl, 'Aucun SDIS trouvé (aire/bbox). Réessaie plus tard ou vérifie le réseau.');
+          }
         }catch(e){
-          tSet(statusEl,'Erreur Overpass/OSM : chargement impossible.');
-        } finally {
+          tSet(statusEl, 'Erreur Overpass/OSM : ' + (e.message||e));
+        }finally{
           btn.disabled = false; btn.textContent = prev;
         }
       }
