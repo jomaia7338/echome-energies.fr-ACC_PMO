@@ -195,6 +195,12 @@
         <div id="searchResults" class="small" aria-live="polite" style="margin-top:6px"></div>
         <div class="small" style="margin-top:6px">Géocodage : Photon OSM → repli Nominatim (usage pro : prévoir un proxy).</div>
       </fieldset>
+      <fieldset>
+        <legend>SDIS Isère (OSM)</legend>
+        <div class="small">Charge les casernes/centres depuis OpenStreetMap via Overpass (limite départementale : Isère).</div>
+        <div style="margin-top:6px"><button id="loadSdis38" class="btn">Charger SDIS Isère</button></div>
+        <div class="small" style="margin-top:6px">Source : OSM/Overpass API. Les données peuvent comporter des doublons ou être incomplètes localement.</div>
+      </fieldset>
 
       <fieldset>
         <legend>Producteur par défaut</legend>
@@ -418,6 +424,45 @@
       document.getElementById('searchBtn').addEventListener('click', ()=>{ const q=(document.getElementById('searchQ').value||'').trim(); if(q) searchAddress(q); });
       document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } else { clearTimeout(searchTimer); searchTimer=setTimeout(()=>{ const q=(e.target.value||'').trim(); if(q) searchAddress(q); }, 500); } });
       document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); const lat=parseFloat(a.getAttribute('data-lat')), lng=parseFloat(a.getAttribute('data-lng')), label=a.getAttribute('data-label-raw')||''; addPoint(lat,lng, selectedType(), label); map.setView([lat,lng], 15); });
+
+      // ====== Chargement SDIS Isère (Overpass/OSM) ======
+      async function loadSdis38(){
+        const q = `[out:json][timeout:40];
+rel["admin_level"="6"]["name"="Isère"];
+map_to_area->.a;
+(
+  node["amenity"="fire_station"](area.a);
+  way["amenity"="fire_station"](area.a);
+  relation["amenity"="fire_station"](area.a);
+);
+out center tags;`;
+        const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
+        const btn = document.getElementById('loadSdis38');
+        const prev = btn.textContent; btn.disabled = true; btn.textContent = 'Chargement…';
+        try{
+          const r = await fetch(url, {headers:{'Accept':'application/json'}});
+          if(!r.ok) throw new Error('Overpass API');
+          const j = await r.json();
+          const els = Array.isArray(j.elements)? j.elements : [];
+          let ok=0, skip=0; const seen = new Set();
+          for(const el of els){
+            let lat=null, lng=null; if(el.type==='node'){ lat=el.lat; lng=el.lon; } else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
+            if(lat==null || lng==null) { continue; }
+            const tags = el.tags || {}; const label = tags.name || tags['addr:place'] || tags['addr:city'] || 'Centre SDIS';
+            const key = `${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+            if(seen.has(key)) { skip++; continue; }
+            seen.add(key);
+            addPoint(lat,lng,'sdis', label);
+            ok++;
+          }
+          tSet(statusEl,`SDIS Isère (OSM) : ${ok} ajoutés${skip?`, ${skip} doublons ignorés`:''}.`);
+        }catch(e){
+          tSet(statusEl,'Erreur Overpass/OSM : chargement impossible.');
+        } finally {
+          btn.disabled = false; btn.textContent = prev;
+        }
+      }
+      document.getElementById('loadSdis38').addEventListener('click', loadSdis38); if(!a) return; e.preventDefault(); const lat=parseFloat(a.getAttribute('data-lat')), lng=parseFloat(a.getAttribute('data-lng')), label=a.getAttribute('data-label-raw')||''; addPoint(lat,lng, selectedType(), label); map.setView([lat,lng], 15); });
 
       // Import / Export simple (CSV sûr)
       document.getElementById('importBtn').onclick = ()=>{ const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return; let ok=0,ko=0; splitLines(txt).forEach(line=>{ if(!line.trim()) return; const p=line.split(/[;,]|\t/).map(s=>s.trim()); if(p.length<4){ko++;return;} const [name,latS,lonS,typeS]=p; const lat=parseFloat(latS), lng=parseFloat(lonS); if(isNaN(lat)||isNaN(lng)){ko++;return;} let t=(typeS||'').toLowerCase(); if(t.startsWith('cons')) t='consumer'; else if(t.startsWith('prod')) t='producer'; else if(t!=='sdis'){ko++;return;} addPoint(lat,lng,t,name); ok++; }); tSet(statusEl,`Import : ${ok} ajouté(s), ${ko} rejeté(s).`); };
