@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACC – Centre libre (diamètre) + POI Incendie (Isère)</title>
+  <title>ACC – Centre libre (diamètre) + POI Incendie + Chronologie</title>
+
   <!-- Leaflet CSS (+ fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
   <meta name="theme-color" content="#37C3AF">
+
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
@@ -62,6 +64,13 @@
     /* Centre libre (tooltip) */
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 
+    /* Chronologie ACC */
+    .tl-table{width:100%;border-collapse:collapse;font-size:13px}
+    .tl-table th,.tl-table td{border:1px solid var(--line);padding:6px}
+    .tl-table th{background:#f9fafb;text-align:left}
+    .tl-done{color:#0f766e;font-weight:600}
+    .tl-overdue{color:#b91c1c;font-weight:600}
+
     /* PRINT */
     .print-header{display:none}
     .print-legend{display:none}
@@ -95,7 +104,7 @@
     </div>
 
     <div class="controls">
-      <!-- Type de point à ajouter (Participants ACC uniquement) -->
+      <!-- Type de point à ajouter (Participants ACC seulement) -->
       <div class="group" role="radiogroup" aria-label="Type de point (ACC)">
         <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
         <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
@@ -179,12 +188,12 @@
 
       <fieldset>
         <legend>Points d’intérêt “Incendie & Secours”</legend>
-        <div class="small">OSM/Overpass – Isère. Noms/operateurs contenant : SDIS, SDMIS, STIS, SLIS (autres casernes incluses).</div>
+        <div class="small">OSM/Overpass – Isère. Noms/opérateurs contenant : SDIS, SDMIS, STIS, SLIS (autres casernes incluses).</div>
         <div class="row" style="margin-top:6px">
           <button id="loadPoiIsere" class="btn">Charger POI Isère</button>
           <label class="small"><input type="checkbox" id="togglePoi" checked> Afficher POI</label>
         </div>
-        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0 chargé(s)</span></div>
+        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0 chargé(s)</span> — Dans D/2 : <span id="poiInRange">0</span></div>
       </fieldset>
 
       <fieldset>
@@ -202,7 +211,21 @@
         <div style="margin-top:6px"><button id="resetDefaultBtn" class="btn secondary">Réinitialiser le défaut</button></div>
       </fieldset>
 
-      <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span> — POI dans D/2 : <span id="poiInRange">0</span></div>
+      <!-- Chronologie ACC (Enogrid) -->
+      <fieldset>
+        <legend>Chronologie ACC</legend>
+        <div class="small" style="margin-bottom:6px">
+          Référence : Enogrid — Chronologie ACC (06/08/2025). Étapes non exhaustives.
+        </div>
+        <div id="accTimeline"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="tlAddStep" class="btn secondary">Ajouter une étape</button>
+          <button id="tlExportCsv" class="btn">Exporter CSV</button>
+          <button id="tlClear" class="btn secondary">Réinitialiser</button>
+        </div>
+      </fieldset>
+
+      <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span></div>
     </div>
   </aside>
 
@@ -234,7 +257,7 @@
         const lat1=toRad(a.lat), lat2=toRad(b.lat);
         const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 
-      // MEC utils
+      // MEC utils (points: {lat,lng})
       function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length;
         const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32})); return {lat0,lon0,P}; }
       function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
@@ -245,7 +268,7 @@
       function inCircle(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
       function minimalEnclosingCircle(pointsLL){
         if(pointsLL.length===0) return null; if(pointsLL.length===1) return {center:pointsLL[0], r:0};
-        const {lat0,lon0,P}=projectLocal(pointsLL.map(p=>({lat:p.lat,lng:p.lng})));
+        const {lat0,lon0,P}=projectLocal(pointsLL);
         let best=null;
         for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){
           const c=circleBy2(P[i],P[j]); if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c;
@@ -265,22 +288,20 @@
       osm.addTo(map);
       L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
 
-      /* Échelle 1:n */
+      /* Échelle 1:n (ratio approximatif) */
       const RatioControl = L.Control.extend({
         options: { position: 'topright' },
         onAdd: function(map){
           const div = L.DomUtil.create('div','leaflet-control ratio-control');
-          this._div = div; this._map = map;
-          this._update = this._update.bind(this);
-          map.on('zoomend moveend', this._update);
-          this._update(); return div;
+          this._div = div; this._map = map; this._update = this._update.bind(this);
+          map.on('zoomend moveend', this._update); this._update(); return div;
         },
         onRemove: function(map){ map.off('zoomend moveend', this._update); },
         _update: function(){
           const c=this._map.getCenter(), z=this._map.getZoom();
           if(z==null){ this._div.textContent='Échelle —'; return; }
           const mpp = 156543.03392 * Math.cos(c.lat*Math.PI/180) / Math.pow(2, z);
-          const denom = Math.max(1, Math.round(mpp / 0.0002645833333));
+          const denom = Math.max(1, Math.round(mpp / 0.0002645833333)); // 0.26458 mm/px
           this._div.textContent = 'Échelle ~ 1:' + denom.toLocaleString('fr-FR');
         }
       });
@@ -293,7 +314,7 @@
       const participants=[]; // {id,name,type,lat,lng,marker}
       const pois=[];         // {id,name,kind,lat,lng,marker}
       let uid=0;
-      let vizCircle=null; // cercle visuel ACC
+      let vizCircle=null; // cercle visuel ACC (diamètre)
       const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
       const strokeOutside='#9CA3AF';
 
@@ -307,7 +328,7 @@
       function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
       function setPoiStats(){ poiStatsEl.textContent = `${pois.length} chargé(s)`; }
 
-      // Ajout PARTICIPANT (ne touche pas aux POI)
+      // Ajout PARTICIPANT (clic carte)
       function addParticipant(lat,lng,type,name){
         const id=++uid; const label=name || `${type} ${id}`;
         const m=L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3}).addTo(participantLayer);
@@ -316,7 +337,7 @@
         m.bindPopup(makeParticipantPopup(entry));
         m.on('contextmenu', ()=> removeParticipant(id));
         participants.push(entry);
-        refreshACC(true); // recalcul ACC uniquement quand Prod/Cons bougent
+        refreshACC(true); // recalcul ACC uniquement (les POI n'influencent pas)
       }
       function makeParticipantPopup(entry){
         const wrap=document.createElement('div');
@@ -335,8 +356,9 @@
         const i=participants.findIndex(p=>p.id===id);
         if(i>-1){ participantLayer.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); }
       }
+      map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
-      // Ajout POI (n’active ni recalc ni fitBounds)
+      // Ajout POI (ne déclenche ni recalc ni fitBounds)
       function addPOI(lat,lng,kind,name){
         const id=++uid; const label=name||kind||'POI';
         const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
@@ -345,21 +367,15 @@
         m.bindPopup(makePoiPopup(entry));
         pois.push(entry);
         setPoiStats();
-        // NE PAS: refreshACC(); // POI ne doit jamais déplacer/recalculer le cercle ACC
-        // Mise à jour du statut "POI dans D/2" avec le centre courant (si existe)
-        updatePoiInRange();
+        updatePoiInRange(); // juste la mise à jour d'info si le centre existe
       }
       function makePoiPopup(entry){
         const wrap=document.createElement('div');
         const title=document.createElement('strong'); title.textContent=entry.name||'POI'; wrap.appendChild(title);
         wrap.appendChild(document.createElement('br'));
         wrap.appendChild(document.createTextNode(entry.kind||'incendie'));
-        // Option : convertir en participant ? (désactivé par défaut)
         return wrap;
       }
-
-      // Clic carte = ajoute un PARTICIPANT
-      map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
       // ACC core (ne dépend que des participants)
       function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } }
@@ -375,17 +391,14 @@
           });
         });
       }
-      function currentEligiblePoints(){ return participants; } // Prod/Cons seulement
-
       function refreshACC(autoFit=false){
         updateCount();
         const D=currentDiameter(); const R=D/2;
-        const elig=currentEligiblePoints();
         clearVizCircle();
-        if(!elig.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); poiInRangeEl.textContent='0'; return; }
-        if(!elig.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); poiInRangeEl.textContent='0'; return; }
+        if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); poiInRangeEl.textContent='0'; return; }
+        if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); poiInRangeEl.textContent='0'; return; }
 
-        const mec = minimalEnclosingCircle(elig.map(p=>({lat:p.lat,lng:p.lng})));
+        const mec = minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng})));
         if(!mec){ tSet(statusEl,'Centre libre non calculable.'); poiInRangeEl.textContent='0'; return; }
         const pass = mec.r <= R + eps;
 
@@ -394,36 +407,30 @@
 
         styleParticipants(mec.center, R);
 
-        // Ne pas déplacer la vue automatiquement si ce n'est pas voulu
         if(autoFit && participants.length>1){
           const g=L.featureGroup(participants.map(p=>p.marker));
           map.fitBounds(g.getBounds().pad(0.25));
         }
 
-        // Statut
-        const outside = elig.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > R + eps).map(p=> p.name||p.type);
+        const outside = participants.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > R + eps).map(p=> p.name||p.type);
         if(pass){
           hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok');
         }else{
           hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko');
         }
 
-        // MàJ du compteur de POI “dans D/2” par rapport au centre courant (sans impacter le centre)
-        updatePoiInRange(mec.center, R);
+        updatePoiInRange(mec.center, R); // info uniquement
       }
 
       function updatePoiInRange(center=null, R=null){
-        // Si pas de centre fourni, essayer le cercle actuel
         if(!center || R==null){
           if(!vizCircle){ poiInRangeEl.textContent='0'; return; }
-          center = vizCircle.getLatLng();
-          R = (vizCircle.getRadius()||0)/1000;
+          center = vizCircle.getLatLng(); R = (vizCircle.getRadius()||0)/1000;
         }
         let cnt=0;
         pois.forEach(p=>{
           const inside = haversineKm(center,{lat:p.lat,lng:p.lng}) <= R + eps;
           if(inside) cnt++;
-          // Style optionnel : accentuer les POI dans le périmètre
           p.marker.setStyle({
             color: inside ? colors.poi : '#8b8b8b',
             weight: inside ? 4 : 2,
@@ -486,7 +493,7 @@
       document.getElementById('exportJson').onclick = ()=>{ const st=captureState(); const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(st.name||'projet_acc')+'.json'; a.click(); URL.revokeObjectURL(url); };
       document.getElementById('importJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé.'); }catch(_){ tSet(statusEl,'Fichier invalide.'); } });
 
-      // Impression
+      // Impression fiable
       function updatePrintHeader(){
         const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
         const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
@@ -558,7 +565,7 @@
             else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
             if(lat==null || lng==null) continue;
             const tags=el.tags||{}; const label=tags.name || tags['addr:place'] || tags['addr:city'] || 'Caserne';
-            const key=`${label.toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+            const key=`${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
             if(seen.has(key)) continue; seen.add(key);
             addPOI(lat,lng, kindFromTags(tags), label); ok++;
           }
@@ -619,14 +626,98 @@
         tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`);
       };
 
-      // Impression (header)
-      function updatePrintHeaderNow(){
-        const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
-        const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
-        document.getElementById('printMeta').textContent = `${name} — D=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
+      // Chronologie ACC (Enogrid) — checklist locale
+      const TL_LS_KEY = 'acc_timeline_v1';
+      const defaultTimeline = [
+        {title:'Cadrage & objectifs', tip:'Objectifs éco/sociaux/territoriaux', due:'', done:false},
+        {title:'Recrutement consommateurs', tip:'Démarrer ~6 mois avant lancement', due:'', done:false},
+        {title:'Étude faisabilité centrale', tip:'PV/hydro/éolien, conformité', due:'', done:false},
+        {title:'Étude ACC (énergie/éco/financier)', tip:'Scénarios, TURPE, clés de répartition', due:'', done:false},
+        {title:'Création/identification PMO', tip:'Association/SAS… obligations PMO', due:'', done:false},
+        {title:'Adhésions des participants à la PMO', tip:'Statuts, bulletins', due:'', done:false},
+        {title:'Déclaration + Convention ACC (Enedis)', tip:'Signature ≥1 mois après raccordement', due:'', done:false},
+        {title:'Contrats producteurs↔consommateurs', tip:'Gré à gré (particuliers ≤1 an)', due:'', done:false},
+        {title:'Démarrage opération', tip:'1er du mois suivant la signature', due:'', done:false},
+        {title:'Exploitation & reporting', tip:'Données mensuelles GRD / PMO', due:'', done:false}
+      ];
+      function loadTL(){ try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)) || defaultTimeline.slice(); }catch(_){ return defaultTimeline.slice(); } }
+      function saveTL(items){ try{ localStorage.setItem(TL_LS_KEY, JSON.stringify(items)); }catch(_){ } }
+      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+      function renderTL(){
+        const root = document.getElementById('accTimeline');
+        const items = loadTL();
+        const today = new Date().toISOString().slice(0,10);
+        const tbl = document.createElement('table'); tbl.className='tl-table';
+        tbl.innerHTML = `
+          <thead><tr>
+            <th style="width:28px">✓</th>
+            <th>Étape</th>
+            <th>Note</th>
+            <th style="width:150px">Échéance</th>
+            <th style="width:110px">Actions</th>
+          </tr></thead>
+          <tbody></tbody>`;
+        const tb = tbl.querySelector('tbody');
+        items.forEach((it, idx)=>{
+          const overdue = it.due && !it.done && it.due < today;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><input type="checkbox" ${it.done?'checked':''} data-idx="${idx}"></td>
+            <td>${escapeHtml(it.title)}</td>
+            <td>${escapeHtml(it.tip||'')}</td>
+            <td>
+              <input type="date" value="${it.due||''}" data-idx="${idx}" class="tl-date" style="width:140px">
+              ${overdue?'<div class="tl-overdue">En retard</div>': (it.done?'<div class="tl-done">Terminé</div>':'')}
+            </td>
+            <td>
+              <button class="btn secondary tl-up" data-idx="${idx}" title="Monter">↑</button>
+              <button class="btn secondary tl-down" data-idx="${idx}" title="Descendre">↓</button>
+              <button class="btn secondary tl-del" data-idx="${idx}" title="Supprimer">✕</button>
+            </td>`;
+          tb.appendChild(tr);
+        });
+        root.innerHTML = ''; root.appendChild(tbl);
+
+        root.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+          cb.addEventListener('change', e=>{
+            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].done = e.target.checked; saveTL(arr); renderTL();
+          });
+        });
+        root.querySelectorAll('.tl-date').forEach(inp=>{
+          inp.addEventListener('change', e=>{
+            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].due = e.target.value; saveTL(arr); renderTL();
+          });
+        });
+        root.querySelectorAll('.tl-up').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i>0){ [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; saveTL(arr); renderTL(); }});
+        root.querySelectorAll('.tl-down').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i<arr.length-1){ [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; saveTL(arr); renderTL(); }});
+        root.querySelectorAll('.tl-del').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); arr.splice(i,1); saveTL(arr); renderTL(); });
       }
-      window.addEventListener('beforeprint', ()=>{ updatePrintHeaderNow(); setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 50); });
-      document.getElementById('printBtn').addEventListener('click', ()=>{ updatePrintHeaderNow(); setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } window.print(); }, 50); });
+      document.getElementById('tlAddStep').onclick = ()=>{
+        const title = prompt('Intitulé de la nouvelle étape :'); if(!title) return;
+        const tip = prompt('Note (optionnel) :') || '';
+        const due = prompt('Échéance (YYYY-MM-DD, optionnel) :') || '';
+        const arr = loadTL(); arr.push({title, tip, due, done:false}); saveTL(arr); renderTL();
+      };
+      document.getElementById('tlClear').onclick = ()=>{
+        if(confirm('Réinitialiser la chronologie aux valeurs par défaut ?')){ saveTL(defaultTimeline.slice()); renderTL(); }
+      };
+      document.getElementById('tlExportCsv').onclick = ()=>{
+        const arr = loadTL();
+        const csv = [
+          'title;note;due;done',
+          ...arr.map(it=>[
+            `"${String(it.title).replace(/"/g,'""')}"`,
+            `"${String(it.tip||'').replace(/"/g,'""')}"`,
+            it.due||'',
+            it.done?'1':'0'
+          ].join(';'))
+        ].join('\n');
+        const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'chronologie_acc.csv'; a.click();
+        URL.revokeObjectURL(url);
+      };
+      renderTL();
 
       // Lancer
       try{ initDefaultProducer(); }catch(_){ }
