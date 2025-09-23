@@ -124,6 +124,9 @@
 
       <!-- Actions -->
       <div class="group">
+        <!-- NOUVEAU : Ouvrir un fichier projet -->
+        <button id="openProjBtn" class="btn icon" title="Ouvrir un fichier projet…" aria-label="Ouvrir un fichier projet">📂</button>
+
         <button id="locateBtn" class="btn icon" title="Me localiser" aria-label="Me localiser">📍</button>
         <button id="fitBtn" class="btn icon" title="Ajuster la vue" aria-label="Ajuster la vue">🗺️</button>
         <button id="printBtn" class="btn icon" title="Exporter en PDF" aria-label="Exporter en PDF">🖨️</button>
@@ -248,7 +251,7 @@
 
       // Utils
       const eps = 1e-9; const toRad = d => d*Math.PI/180;
-      const esc = s => String(s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      const esc = s => String(s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
       const safeText = s => String(s ?? '');
       const tSet = (el,txt,cls='')=>{ el.className=cls; el.textContent=txt; };
       const hSet = (el,html,cls='')=>{ el.className=cls; el.innerHTML=html; };
@@ -321,6 +324,9 @@
       // Couches
       const participantLayer = L.layerGroup().addTo(map);
       const poiLayer = L.layerGroup().addTo(map);
+
+      // Expose (si tu veux réutiliser ailleurs)
+      window.__participants__ = participants;
 
       // UI helpers
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
@@ -447,6 +453,23 @@
       document.getElementById('customKm').addEventListener('input', refreshACC);
       document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
       document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
+
+      // NOUVEAU : Bouton “Ouvrir un fichier projet…”
+      document.getElementById('openProjBtn').onclick = () => {
+        const inp = document.getElementById('importJson'); // input type="file" déjà présent dans le tiroir
+        if (inp) inp.click(); // ouvre le sélecteur ; le handler d'import existant fera le reste
+      };
+      // Raccourci Cmd/Ctrl + O (désactivé si on tape dans un champ)
+      window.addEventListener('keydown', (e) => {
+        const tag = (e.target && e.target.tagName || '').toUpperCase();
+        const typing = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable);
+        if (typing) return;
+        if ((e.metaKey || e.ctrlKey) && (e.key || '').toLowerCase() === 'o') {
+          e.preventDefault();
+          const inp = document.getElementById('importJson');
+          if (inp) inp.click();
+        }
+      });
 
       // Localisation
       let myMarker=null, myAccCircle=null;
@@ -642,7 +665,7 @@
       ];
       function loadTL(){ try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)) || defaultTimeline.slice(); }catch(_){ return defaultTimeline.slice(); } }
       function saveTL(items){ try{ localStorage.setItem(TL_LS_KEY, JSON.stringify(items)); }catch(_){ } }
-      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
       function renderTL(){
         const root = document.getElementById('accTimeline');
         const items = loadTL();
