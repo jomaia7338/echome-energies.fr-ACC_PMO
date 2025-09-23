@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACC PV – Périmètre (D fixe / Territoire) + SIS + DatARA + POI Isère</title>
+  <title>ACC – Centre libre (Diamètre) · PV · AURA</title>
 
   <!-- Leaflet CSS (+ fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
@@ -15,7 +15,7 @@
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
-    body{margin:0;font-family:'Open Sans',system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
+    body{margin:0;font-family:'Open Sans', system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;color:var(--ink);background:#fff}
 
     /* Header */
     header.slim{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:6px 8px}
@@ -23,23 +23,24 @@
     .brand svg{height:26px;width:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
     .brand .name{font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:.3px}
     .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between;width:100%}
-    .group{display:flex;align-items:center;gap:8px}
+    .group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#fff}
     .dot{width:10px;height:10px;border-radius:50%}
-    .prod{background:#6D28D9}.cons{background:#2e86de}.poi{background:#E10600}.ter{background:#14b8a6}
+    .prod{background:#6D28D9}.cons{background:#2e86de}.poi{background:#E10600}
 
     .btn{padding:6px 8px;border:1px solid var(--brand);border-radius:10px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700}
     .btn.icon{padding:6px 8px;min-width:36px;display:inline-flex;align-items:center;justify-content:center}
     .btn.secondary{background:#fff;color:#0f4f47;border-color:var(--brand)}
-    select,input[type="number"],input[type="text"]{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+    select, input[type="number"], input[type="text"]{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 
     #status{margin:6px 8px 0;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;font-size:14px}
     #status.ok{background:rgba(55,195,175,.08);border-color:rgba(55,195,175,.45);color:#116a60}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
+
     #map{min-height:420px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
 
     /* Drawer */
-    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:400px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
+    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:380px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
     #drawer.open{transform:none}
     #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
     #drawer h2{font-family:'Montserrat',sans-serif;font-size:16px;margin:0}
@@ -55,13 +56,12 @@
     .legend-overlay .item{display:flex;align-items:center;gap:6px}
 
     /* Échelle 1:n */
-    .leaflet-control.ratio-control{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;z-index:1000}
+    .leaflet-control.ratio-control{
+      background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;
+      padding:4px 8px;font-size:12px;z-index:1000
+    }
 
-    /* Centre libre (tooltip) */
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-
-    /* Territoire sélectionné */
-    .territory-outline{stroke:#14b8a6 !important;stroke-width:3 !important;fill:#14b8a61a !important}
 
     /* Chronologie ACC */
     .tl-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -103,19 +103,15 @@
     </div>
 
     <div class="controls">
-      <!-- Mode de périmètre -->
-      <div class="group" role="radiogroup" aria-label="Mode de périmètre">
-        <label class="chip"><input type="radio" name="mode" value="diameter" checked> D fixe</label>
-        <label class="chip"><input type="radio" name="mode" value="territory"> Territoire</label>
-      </div>
-
-      <!-- D fixe : type + diamètre + SIS -->
-      <div class="group" id="diameterControls" aria-label="Paramètres D fixe">
-        <label class="small">Type point :</label>
+      <!-- Type de point à ajouter -->
+      <div class="group" role="radiogroup" aria-label="Type de point (ACC)">
         <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
         <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
+      </div>
 
-        <label class="small">D :</label>
+      <!-- Diamètre ACC -->
+      <div class="group" aria-label="Diamètre">
+        <label class="small">Diamètre :</label>
         <select id="limitSel" aria-label="Diamètre autorisé">
           <option value="2">2 km</option>
           <option value="10">10 km</option>
@@ -123,8 +119,8 @@
           <option value="custom">Perso</option>
         </select>
         <input id="customKm" type="number" min="0" step="0.1" placeholder="km" style="width:90px;display:none" aria-label="Diamètre personnalisé">
-        <label class="small" title="Si un SIS est participant, D=20 km autorisé">
-          <input id="sisToggle" type="checkbox"> SIS participant
+        <label class="small" title="Si un SIS participe, le diamètre = 20 km">
+          <input type="checkbox" id="sisCheck"> SIS participant → 20 km
         </label>
       </div>
 
@@ -147,18 +143,17 @@
         <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
         <text x="60" y="19" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="14" fill="#ffffff">ECHOME</text>
       </svg>
-      <span class="title">ACC PV – Périmètre</span>
+      <span class="title">ACC – Centre libre (diamètre)</span>
     </div>
     <div class="right small" id="printMeta"></div>
   </div>
 
   <div id="status" role="status" aria-live="polite">Initialisation…</div>
-  <div id="map" aria-label="Carte interactive" tabindex="0">
+  <div id="map" aria-label="Carte interactive">
     <div class="legend-overlay" aria-hidden="true">
       <div class="item"><span class="dot prod"></span>Producteur</div>
       <div class="item"><span class="dot cons"></span>Consommateur</div>
-      <div class="item"><span class="dot poi"></span>POI incendie (SDIS/SDMIS/STIS/SLIS)</div>
-      <div class="item"><span class="dot ter"></span>Territoire</div>
+      <div class="item"><span class="dot poi"></span>POI incendie (SDIS/SDMIS/STIS/SLIS…)</div>
     </div>
   </div>
 
@@ -189,25 +184,25 @@
 
       <fieldset>
         <legend>Import rapide (participants ACC)</legend>
-        <div class="small">Format : <code>Nom;Lat;Lon;Type</code> — Types : <strong>consumer</strong> / <strong>producer</strong></div>
+        <div class="small">Format : Nom;Lat;Lon;Type — Types : consumer / producer</div>
         <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer"></textarea>
         <div style="margin-top:8px"><button id="importBtn" class="btn">Importer</button></div>
       </fieldset>
 
       <fieldset>
-        <legend>Points d’intérêt “Incendie & Secours” (Isère)</legend>
-        <div class="small">OSM/Overpass – Isère. Noms/opérateurs contenant : SDIS, SDMIS, STIS, SLIS.</div>
+        <legend>Points d’intérêt “Incendie & Secours”</legend>
+        <div class="small">OSM/Overpass – Isère. Noms/opérateurs contenant : SDIS, SDMIS, STIS, SLIS (autres casernes incluses).</div>
         <div class="row" style="margin-top:6px">
           <button id="loadPoiIsere" class="btn">Charger POI Isère</button>
           <label class="small"><input type="checkbox" id="togglePoi" checked> Afficher POI</label>
         </div>
-        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0</span> — Dans D/2 : <span id="poiInRange">0</span></div>
+        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0 chargé(s)</span> — Dans D/2 : <span id="poiInRange">0</span></div>
       </fieldset>
 
       <fieldset>
         <legend>Données AURA (WMS/WFS DatARA)</legend>
         <div class="small" style="margin-bottom:6px">
-          Source: DatARA (WMS/WFS). Choisis une couche (WMS) ou charge des entités (WFS).
+          Source: DatARA (WMS/WFS). Choisis une couche ou un type puis affiche-la sur la carte.
         </div>
 
         <!-- WMS -->
@@ -221,9 +216,7 @@
         <div class="row" style="margin-top:6px">
           <select id="wmsLayerSel" style="flex:1;min-width:260px"></select>
           <button id="wmsAddBtn" class="btn">Afficher</button>
-          <label class="small" style="display:flex;align-items:center;gap:6px">
-            Opacité <input id="wmsOpacity" type="range" min="0" max="1" step="0.05" value="0.8">
-          </label>
+          <label class="small" style="display:flex;align-items:center;gap:6px">Opacité <input id="wmsOpacity" type="range" min="0" max="1" step="0.05" value="0.8"></label>
         </div>
 
         <!-- WFS -->
@@ -240,14 +233,6 @@
           <label class="small" title="Limiter le nombre d'entités">Max <input id="wfsMaxFeat" type="number" min="50" step="50" value="1000" style="width:80px"></label>
         </div>
 
-        <!-- Territoire -->
-        <div class="row" style="margin-top:10px">
-          <button id="pickTerritoryBtn" class="btn secondary" title="Clique un polygone chargé WFS">Choisir territoire (clic polygone)</button>
-          <button id="clearTerritoryBtn" class="btn secondary">Effacer territoire</button>
-        </div>
-        <div class="small">Territoire : <span id="territoryLabel">—</span> — Participants dans le territoire : <span id="pInTer">0</span>/<span id="pTotal">0</span></div>
-
-        <!-- État / gestion -->
         <div class="small" style="margin-top:8px">
           Couches actives : <span id="extLayersCount">0</span>
           — <a href="#" id="extToggleAll">Afficher/Masquer</a> ·
@@ -255,10 +240,26 @@
         </div>
       </fieldset>
 
-      <!-- Chronologie ACC -->
+      <fieldset>
+        <legend>Rechercher une adresse</legend>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="searchQ" type="text" placeholder="Adresse, commune, code postal" style="flex:1" aria-label="Rechercher une adresse">
+          <button id="searchBtn" class="btn">Rechercher</button>
+        </div>
+        <div id="searchResults" class="small" aria-live="polite" style="margin-top:6px"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Producteur par défaut</legend>
+        <div class="small">Adresse : <em>210 Les Espinasses, 38250 Villard-de-Lans</em></div>
+        <div style="margin-top:6px"><button id="resetDefaultBtn" class="btn secondary">Réinitialiser le défaut</button></div>
+      </fieldset>
+
       <fieldset>
         <legend>Chronologie ACC</legend>
-        <div class="small" style="margin-bottom:6px">Checklist locale (éditable) — export CSV.</div>
+        <div class="small" style="margin-bottom:6px">
+          Référence : Enogrid — Chronologie ACC (indicative). Étapes non exhaustives.
+        </div>
         <div id="accTimeline"></div>
         <div class="row" style="margin-top:8px">
           <button id="tlAddStep" class="btn secondary">Ajouter une étape</button>
@@ -274,20 +275,19 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <script>
+    // Fallback si unpkg bloqué
     (function ensureLeaflet(cb){ if(window.L){ cb(); return; }
       var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
       s.crossOrigin='anonymous'; s.referrerPolicy='no-referrer'; s.onload=cb;
-      s.onerror=function(){ document.getElementById('status').textContent='Erreur : Leaflet bloqué.'; };
+      s.onerror=function(){ document.getElementById('status').textContent='Erreur : Leaflet bloqué par le réseau.'; };
       document.head.appendChild(s);
     })(initApp);
 
     function initApp(){
       const statusEl = document.getElementById('status');
-      const mapEl = document.getElementById('map');
       const poiStatsEl = document.getElementById('poiStats');
       const poiInRangeEl = document.getElementById('poiInRange');
-      const territoryLabelEl = document.getElementById('territoryLabel');
-      const pInTerEl = document.getElementById('pInTer'); const pTotalEl = document.getElementById('pTotal');
+      const mapEl = document.getElementById('map');
 
       // Utils
       const eps = 1e-9; const toRad = d => d*Math.PI/180;
@@ -300,7 +300,7 @@
         const lat1=toRad(a.lat), lat2=toRad(b.lat);
         const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 
-      // MEC utils
+      // MEC utils (points: {lat,lng})
       function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length;
         const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32})); return {lat0,lon0,P}; }
       function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
@@ -323,37 +323,6 @@
         const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r};
       }
 
-      // Point in (multi)polygon (ray casting)
-      function pointInPolygon(pt, poly){
-        // poly: array of rings; ring: array of [lng,lat]; MultiPolygon: array of polygons
-        function inRing(p, ring){
-          let inside=false;
-          for(let i=0,j=ring.length-1;i<ring.length;j=i++){
-            const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
-            const intersect = ((yi>p[1]) !== (yj>p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / ((yj - yi)||1e-12) + xi);
-            if(intersect) inside = !inside;
-          }
-          return inside;
-        }
-        const p=[pt.lng, pt.lat];
-        if(poly.type==='Polygon'){
-          const rings=poly.coordinates;
-          if(!inRing(p, rings[0])) return false; // outside outer ring
-          for(let k=1;k<rings.length;k++){ if(inRing(p, rings[k])) return false; } // in a hole
-          return true;
-        }else if(poly.type==='MultiPolygon'){
-          for(const g of poly.coordinates){
-            const rings=g;
-            if(inRing(p, rings[0])){
-              let inHole=false; for(let k=1;k<rings.length;k++){ if(inRing(p, rings[k])){inHole=true;break;} }
-              if(!inHole) return true;
-            }
-          }
-          return false;
-        }
-        return false;
-      }
-
       // Carte
       const map = L.map('map', { zoomControl:true }).setView([45.3, 5.6], 8);
       const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© OpenStreetMap' });
@@ -362,7 +331,7 @@
       osm.addTo(map);
       L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
 
-      /* Échelle 1:n */
+      /* Échelle 1:n (ratio approximatif) */
       const RatioControl = L.Control.extend({
         options: { position: 'topright' },
         onAdd: function(map){
@@ -385,63 +354,46 @@
       window.addEventListener('resize', layout); setTimeout(layout, 50);
 
       // Données
-      const participants=[]; // {id,name,type,lat,lng,marker,flags?{sis:true}}
+      const participants=[]; // {id,name,type,lat,lng,marker}
       const pois=[];         // {id,name,kind,lat,lng,marker}
       let uid=0;
       let vizCircle=null; // cercle visuel ACC (diamètre)
-      let mode='diameter'; // 'diameter' | 'territory'
-      let territoryGeom=null; // GeoJSON geometry (Polygon/MultiPolygon)
-      let territoryLayer=null; // Leaflet layer highlight
-      let territoryPickMode=false;
-
       const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
-
-      // Couches
       const participantLayer = L.layerGroup().addTo(map);
       const poiLayer = L.layerGroup().addTo(map);
-      const extLayerGroup = L.layerGroup().addTo(map);
-
-      // Expose (utile pour export)
       window.__participants__ = participants;
 
       // UI helpers
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
-      function sisChecked(){ return !!document.getElementById('sisToggle').checked; }
       function currentDiameter(){
+        const sis = document.getElementById('sisCheck').checked;
+        if(sis) return 20;
         const sel=document.getElementById('limitSel').value;
         if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; }
         return parseFloat(sel);
       }
-      function updateCount(){
-        const c=document.getElementById('count');
-        const n=participants.length; const np=participants.filter(p=>p.type==='producer').length;
-        c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.';
-        pTotalEl.textContent = String(n);
-      }
-      function setPoiStats(){ poiStatsEl.textContent = String(pois.length); }
+      function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
+      function setPoiStats(){ poiStatsEl.textContent = `${pois.length} chargé(s)`; }
 
-      // --- PARTICIPANTS ---
-      function addParticipant(lat,lng,type,name,flags=null){
+      // Ajout PARTICIPANT (clic carte)
+      function addParticipant(lat,lng,type,name){
         const id=++uid; const label=name || `${type} ${id}`;
         const m=L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3}).addTo(participantLayer);
-        const entry={id,name:label,type,lat,lng,marker:m,flags:flags||{}};
-        m.bindTooltip(`${safeText(label)} (${type}${entry.flags?.sis?' · SIS':''})`);
+        const entry={id,name:label,type,lat,lng,marker:m};
+        m.bindTooltip(`${safeText(label)} (${type})`);
         m.bindPopup(makeParticipantPopup(entry));
         m.on('contextmenu', ()=> removeParticipant(id));
         participants.push(entry);
-
-        // Si on a ajouté un SIS participant, cocher SIS
-        if(entry.flags?.sis){ document.getElementById('sisToggle').checked = true; }
-        refreshACC(true); // recalc ACC (selon mode)
+        refreshACC(true);
       }
       function makeParticipantPopup(entry){
         const wrap=document.createElement('div');
         const title=document.createElement('strong'); title.textContent=entry.name||''; wrap.appendChild(title);
         wrap.appendChild(document.createElement('br'));
-        wrap.appendChild(document.createTextNode(entry.type + (entry.flags?.sis?' · SIS':'')));
+        wrap.appendChild(document.createTextNode(entry.type));
         const box=document.createElement('div'); box.style.marginTop='6px'; box.style.display='flex'; box.style.gap='6px'; box.style.flexWrap='wrap';
         const bRen=document.createElement('button'); bRen.className='btn secondary'; bRen.textContent='Renommer';
-        bRen.onclick=()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); entry.marker.setPopupContent(makeParticipantPopup(entry)); entry.marker.bindTooltip(`${entry.name} (${entry.type}${entry.flags?.sis?' · SIS':''})`); } };
+        bRen.onclick=()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); entry.marker.setPopupContent(makeParticipantPopup(entry)); entry.marker.bindTooltip(`${entry.name} (${entry.type})`); } };
         const bDel=document.createElement('button'); bDel.className='btn secondary'; bDel.textContent='Supprimer';
         bDel.onclick=()=> removeParticipant(entry.id);
         box.appendChild(bRen); box.appendChild(bDel); wrap.appendChild(box);
@@ -451,9 +403,9 @@
         const i=participants.findIndex(p=>p.id===id);
         if(i>-1){ participantLayer.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); }
       }
-      map.on('click', e=>{ if(mode!=='territory' || !territoryPickMode) addParticipant(e.latlng.lat, e.latlng.lng, selectedType()); });
+      map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
-      // --- POI ---
+      // Ajout POI (ne déclenche pas le calcul)
       function addPOI(lat,lng,kind,name){
         const id=++uid; const label=name||kind||'POI';
         const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
@@ -462,46 +414,19 @@
         m.bindPopup(makePoiPopup(entry));
         pois.push(entry);
         setPoiStats();
-        if(mode==='diameter') updatePoiInRange(); // info seulement
+        updatePoiInRange();
       }
       function makePoiPopup(entry){
         const wrap=document.createElement('div');
         const title=document.createElement('strong'); title.textContent=entry.name||'POI'; wrap.appendChild(title);
         wrap.appendChild(document.createElement('br'));
         wrap.appendChild(document.createTextNode(entry.kind||'incendie'));
-        const box=document.createElement('div'); box.style.marginTop='6px'; box.style.display='flex'; box.style.gap='6px'; box.style.flexWrap='wrap';
-        const bAdd=document.createElement('button'); bAdd.className='btn'; bAdd.textContent='Ajouter comme participant (SIS)';
-        bAdd.onclick=()=>{ addParticipant(entry.lat,entry.lng,'consumer', entry.name, {sis:true}); };
-        box.appendChild(bAdd); wrap.appendChild(box);
         return wrap;
       }
 
-      // --- MODE/PARAMS UI ---
-      function applySisLock(){
-        const sis = sisChecked() || participants.some(p=>p.flags?.sis);
-        const sel = document.getElementById('limitSel');
-        const custom = document.getElementById('customKm');
-        if(sis){
-          sel.value='20'; sel.disabled=true; custom.value=''; custom.style.display='none'; custom.disabled=true;
-        }else{
-          sel.disabled=false; custom.disabled=false;
-          if(sel.value==='custom') custom.style.display='inline-block';
-        }
-      }
-      document.querySelectorAll('input[name="mode"]').forEach(r=>{
-        r.addEventListener('change', ()=>{
-          mode = document.querySelector('input[name="mode"]:checked').value;
-          document.getElementById('diameterControls').style.display = (mode==='diameter')?'flex':'none';
-          refreshACC(true);
-        });
-      });
-      document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display=(v==='custom')?'inline-block':'none'; refreshACC(); });
-      document.getElementById('customKm').addEventListener('input', refreshACC);
-      document.getElementById('sisToggle').addEventListener('change', ()=>{ applySisLock(); refreshACC(); });
-
-      // --- ACC logique (diameter mode) ---
+      // ACC core (ne dépend que des participants)
       function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } }
-      function styleParticipantsCircle(center, R){
+      function styleParticipants(center, R){
         participants.forEach(p=>{
           const d = haversineKm(center,{lat:p.lat,lng:p.lng});
           const inside = d <= R + eps;
@@ -513,9 +438,8 @@
           });
         });
       }
-      function refreshDiameterMode(autoFit=false){
+      function refreshACC(autoFit=false){
         updateCount();
-        applySisLock();
         const D=currentDiameter(); const R=D/2;
         clearVizCircle();
         if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); poiInRangeEl.textContent='0'; return; }
@@ -528,7 +452,7 @@
         vizCircle = L.circle([mec.center.lat,mec.center.lng],{ radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6' })
           .addTo(map).bindTooltip('Centre libre (visualisation) — centre non défini',{className:'center-free-tip'});
 
-        styleParticipantsCircle(mec.center, R);
+        styleParticipants(mec.center, R);
 
         if(autoFit && participants.length>1){
           const g=L.featureGroup(participants.map(p=>p.marker));
@@ -536,13 +460,16 @@
         }
 
         const outside = participants.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > R + eps).map(p=> p.name||p.type);
-        if(pass){ hSet(statusEl, `<strong>Conforme</strong> (D=${esc(String(D))} km) — r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok'); }
-        else{ hSet(statusEl, `<strong>Non conforme</strong> (D=${esc(String(D))} km) — r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko'); }
+        if(pass){
+          hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok');
+        }else{
+          hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko');
+        }
 
-        updatePoiInRange(mec.center, R);
+        updatePoiInRange(mec.center, R); // info uniquement
       }
+
       function updatePoiInRange(center=null, R=null){
-        if(mode!=='diameter'){ poiInRangeEl.textContent='0'; return; }
         if(!center || R==null){
           if(!vizCircle){ poiInRangeEl.textContent='0'; return; }
           center = vizCircle.getLatLng(); R = (vizCircle.getRadius()||0)/1000;
@@ -562,72 +489,37 @@
         poiInRangeEl.textContent = String(cnt);
       }
 
-      // --- Territoire mode ---
-      function clearTerritory(){
-        if(territoryLayer){ map.removeLayer(territoryLayer); territoryLayer=null; }
-        territoryGeom=null; territoryLabelEl.textContent='—'; pInTerEl.textContent='0';
-      }
-      function labelFromProps(props){
-        const keys=['name','nom','NOM','libelle','LIBELLE','NOM_COM','COMMUNE','EPCI','EPCI_NOM','epci_nom','titre','TITLE','intitule','INTITULE'];
-        for(const k of keys){ if(props && props[k]!=null) return String(props[k]); }
-        return '(territoire)';
-      }
-      function styleParticipantsTerritory(){
-        if(!territoryGeom){ participants.forEach(p=>p.marker.setStyle({color:colors[p.type],fillColor:colors[p.type],fillOpacity:0.3,weight:2})); pInTerEl.textContent='0'; return; }
-        let count=0;
-        participants.forEach(p=>{
-          const inside = pointInPolygon({lat:p.lat,lng:p.lng}, territoryGeom);
-          if(inside) count++;
-          p.marker.setStyle({
-            color: inside ? colors[p.type] : '#8b8b8b',
-            weight: inside ? 3 : 2,
-            fillColor: colors[p.type],
-            fillOpacity: inside ? 0.5 : 0.15
-          });
-        });
-        pInTerEl.textContent = String(count);
-      }
-      function refreshTerritoryMode(autoFit=false){
-        updateCount();
-        clearVizCircle();
-        if(!participants.length){ tSet(statusEl,'Ajoutez des participants.'); styleParticipantsTerritory(); return; }
-        if(!territoryGeom){ tSet(statusEl,'Mode Territoire : cliquez “Choisir territoire” puis cliquez un polygone WFS chargé.', ''); styleParticipantsTerritory(); return; }
-        styleParticipantsTerritory();
-        const n=parseInt(pInTerEl.textContent||'0',10), N=participants.length;
-        if(n===N) hSet(statusEl, `<strong>Conforme (ACC étendue)</strong> — Tous les participants sont dans le territoire sélectionné.`, 'ok');
-        else hSet(statusEl, `<strong>Non conforme (ACC étendue)</strong> — ${n}/${N} dans le territoire.`, 'ko');
-        if(autoFit && territoryLayer){ map.fitBounds(territoryLayer.getBounds().pad(0.2)); }
-      }
+      // UI top bar
+      document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display=(v==='custom')?'inline-block':'none'; refreshACC(); });
+      document.getElementById('customKm').addEventListener('input', refreshACC);
+      document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
+      document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
 
-      function refreshACC(autoFit=false){
-        if(mode==='diameter') refreshDiameterMode(autoFit);
-        else refreshTerritoryMode(autoFit);
-      }
-
-      // UI top bar actions
-      document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); refreshACC(); };
-      document.getElementById('fitBtn').onclick = ()=>{ if(mode==='territory' && territoryLayer){ map.fitBounds(territoryLayer.getBounds().pad(0.2)); return; }
-        if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
+      // SIS participant → force D=20 km (désactive le sélecteur)
+      const sisCheck = document.getElementById('sisCheck');
+      sisCheck.addEventListener('change', ()=>{
+        const sel=document.getElementById('limitSel');
+        const custom=document.getElementById('customKm');
+        if(sisCheck.checked){ sel.disabled=true; custom.disabled=true; }
+        else { sel.disabled=false; custom.disabled=false; }
+        refreshACC();
+      });
 
       // Bouton “Ouvrir un fichier projet…”
       document.getElementById('openProjBtn').onclick = () => {
-        const inp = document.getElementById('importJson'); if (inp) inp.click();
+        const inp = document.getElementById('importJson');
+        if (inp) inp.click();
       };
-      // Raccourci Cmd/Ctrl + O (désactivé si on tape dans un champ)
+      // Cmd/Ctrl + O (hors saisie)
       window.addEventListener('keydown', (e) => {
-        const tag=(e.target && e.target.tagName || '').toUpperCase();
-        const typing = tag==='INPUT'||tag==='TEXTAREA'||(e.target&&e.target.isContentEditable);
+        const tag = (e.target && e.target.tagName || '').toUpperCase();
+        const typing = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable);
         if (typing) return;
-        if ((e.metaKey||e.ctrlKey) && (e.key||'').toLowerCase()==='o'){ e.preventDefault(); const inp=document.getElementById('importJson'); if(inp) inp.click(); }
-      });
-
-      // Drag & drop .json sur la carte
-      mapEl.addEventListener('dragover', e=>{ e.preventDefault(); });
-      mapEl.addEventListener('drop', async e=>{
-        e.preventDefault();
-        const f = e.dataTransfer.files && e.dataTransfer.files[0];
-        if(!f || !/\.json$/i.test(f.name)) return;
-        try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé (drag & drop).'); }catch(_){ tSet(statusEl,'Fichier invalide.'); }
+        if ((e.metaKey || e.ctrlKey) && (e.key || '').toLowerCase() === 'o') {
+          e.preventDefault();
+          const inp = document.getElementById('importJson');
+          if (inp) inp.click();
+        }
       });
 
       // Localisation
@@ -651,39 +543,22 @@
       document.getElementById('gearBtn').onclick = ()=>{ refreshProjectList(); drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); };
       document.getElementById('drawerClose').onclick = ()=>{ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); };
 
-      // Projets (participants + settings + territoire minimal)
+      // Projets (participants seulement)
       function captureState(){ return {
         name: (document.getElementById('projName').value||'Projet 1').trim()||'Projet 1',
-        settings: {
-          mode, sis: sisChecked(),
-          diameterSel: document.getElementById('limitSel').value,
-          customKm: document.getElementById('customKm').value
-        },
-        territory: territoryGeom ? { geometry: territoryGeom, label: territoryLabelEl.textContent||'' } : null,
-        participants: participants.map(p=>({name:p.name, lat:p.lat, lng:p.lng, type:p.type, flags:p.flags||{}}))
+        settings: { diameterSel: document.getElementById('limitSel').value, customKm: document.getElementById('customKm').value, sis: document.getElementById('sisCheck').checked },
+        participants: participants.map(p=>({name:p.name, lat:p.lat, lng:p.lng, type:p.type}))
       }; }
       function applyState(st){
-        // reset participants
         participants.slice().forEach(p=> removeParticipant(p.id));
-        // settings
         document.getElementById('projName').value = st.name || 'Projet';
-        mode = st.settings?.mode || 'diameter';
-        document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
-        document.getElementById('sisToggle').checked = !!st.settings?.sis;
-        document.getElementById('diameterControls').style.display = (mode==='diameter')?'flex':'none';
         document.getElementById('limitSel').value = st.settings?.diameterSel || '20';
         document.getElementById('customKm').value = st.settings?.customKm || '';
-        document.getElementById('customKm').style.display = (document.getElementById('limitSel').value==='custom')?'inline-block':'none';
-        applySisLock();
-        // territory
-        clearTerritory();
-        if(st.territory && st.territory.geometry){
-          territoryGeom = st.territory.geometry;
-          territoryLayer = L.geoJSON({type:'Feature', geometry:territoryGeom}, {style:{color:'#14b8a6',weight:3,fillOpacity:0.08}}).addTo(map);
-          territoryLabelEl.textContent = st.territory.label || '(territoire)';
-        }
-        // participants
-        (st.participants||[]).forEach(p=> addParticipant(p.lat, p.lng, p.type, p.name, p.flags||{}));
+        document.getElementById('sisCheck').checked = !!(st.settings?.sis);
+        const custom=document.getElementById('customKm'); const sel=document.getElementById('limitSel');
+        custom.style.display = (sel.value==='custom')?'inline-block':'none';
+        if(document.getElementById('sisCheck').checked){ sel.disabled=true; custom.disabled=true; } else { sel.disabled=false; custom.disabled=false; }
+        (st.participants||[]).forEach(p=> addParticipant(p.lat, p.lng, p.type, p.name));
         refreshACC(true);
       }
       function lsKey(name){ return 'acc_project:'+name; }
@@ -695,16 +570,11 @@
       document.getElementById('exportJson').onclick = ()=>{ const st=captureState(); const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(st.name||'projet_acc')+'.json'; a.click(); URL.revokeObjectURL(url); };
       document.getElementById('importJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé.'); }catch(_){ tSet(statusEl,'Fichier invalide.'); } });
 
-      // Impression
+      // Impression fiable
       function updatePrintHeader(){
         const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
-        const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
-        if(mode==='diameter'){
-          const D=currentDiameter();
-          document.getElementById('printMeta').textContent = `${name} — Mode D fixe (D=${D} km${sisChecked()||participants.some(p=>p.flags?.sis)?' · SIS':''}) — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
-        }else{
-          document.getElementById('printMeta').textContent = `${name} — Mode Territoire (${territoryLabelEl.textContent||'—'}) — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
-        }
+        const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
+        document.getElementById('printMeta').textContent = `${name} — D=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
       }
       async function ensureTilesReady(timeout=2000){
         return new Promise(resolve=>{
@@ -721,4 +591,336 @@
 
       // Recherche adresse
       async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1], lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label || p.name || q, lat, lng}; }).filter(Boolean); }
-      async function geocodeNominatim(q){ const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q='+encodeURIComponent(q); const r
+      async function geocodeNominatim(q){ const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q='+encodeURIComponent(q); const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json(); return j.map(o=>({label:o.display_name,lat:parseFloat(o.lat),lng:parseFloat(o.lon)})); }
+      async function searchAddress(q){ const box=document.getElementById('searchResults'); box.textContent='Recherche…'; let res=[]; try{ res=await geocodePhoton(q); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){ } }
+        if(!res.length){ box.textContent='Aucun résultat ou service indisponible.'; return; }
+        const ul=document.createElement('ul'); res.forEach(r=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=r.label; a.dataset.lat=String(r.lat); a.dataset.lng=String(r.lng); a.dataset.label=r.label; li.appendChild(a); ul.appendChild(li); }); box.innerHTML=''; box.appendChild(ul);
+      }
+      document.getElementById('searchBtn').addEventListener('click', ()=>{ const q=(document.getElementById('searchQ').value||'').trim(); if(q) searchAddress(q); });
+      document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
+      document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); addParticipant(parseFloat(a.dataset.lat), parseFloat(a.dataset.lng), selectedType(), a.dataset.label); map.setView([parseFloat(a.dataset.lat), parseFloat(a.dataset.lng)], 15); });
+
+      // POI Isère (Overpass)
+      async function loadPoiIsere(){
+        const queries = [
+`[out:json][timeout:60];
+(
+  rel["admin_level"="6"]["ref:INSEE"="38"];
+  rel["admin_level"="6"]["name"="Isère"];
+  rel["admin_level"="6"]["name"="Isere"];
+); map_to_area->.a;
+(
+  node["amenity"="fire_station"](area.a);
+  way["amenity"="fire_station"](area.a);
+  relation["amenity"="fire_station"](area.a);
+); out center tags;`,
+`[out:json][timeout:60];
+(
+  node["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  way["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  relation["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+); out center tags;`
+        ];
+        const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
+        const btn=document.getElementById('loadPoiIsere'); const prev=btn.textContent; btn.disabled=true; btn.textContent='Chargement…';
+
+        function kindFromTags(tags){
+          const t=(s)=>String(s||'').toUpperCase();
+          const name=t(tags.name), op=t(tags.operator);
+          if(/SDMIS/.test(name)||/SDMIS/.test(op)) return 'SDMIS';
+          if(/STIS/.test(name)||/STIS/.test(op)) return 'STIS';
+          if(/SLIS/.test(name)||/SLIS/.test(op)) return 'SLIS';
+          if(/SDIS/.test(name)||/SDIS/.test(op)) return 'SDIS';
+          return 'Caserne';
+        }
+        function parseAndAdd(j){
+          const els=Array.isArray(j.elements)?j.elements:[]; let ok=0; const seen=new Set();
+          for(const el of els){
+            let lat=null,lng=null;
+            if(el.type==='node'){ lat=el.lat; lng=el.lon; }
+            else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
+            if(lat==null || lng==null) continue;
+            const tags=el.tags||{}; const label=tags.name || tags['addr:place'] || tags['addr:city'] || 'Caserne';
+            const key=`${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+            if(seen.has(key)) continue; seen.add(key);
+            addPOI(lat,lng, kindFromTags(tags), label); ok++;
+          }
+          return ok;
+        }
+
+        let success=false;
+        try{
+          for(const q of queries){
+            if(success) break;
+            for(const ep of endpoints){
+              try{
+                const r=await fetch(ep+'?data='+encodeURIComponent(q),{headers:{'Accept':'application/json'}});
+                if(!r.ok) throw new Error('HTTP '+r.status);
+                const j=await r.json();
+                const k=parseAndAdd(j);
+                if(k>0){ success=true; break; }
+              }catch(e){ /* essayer endpoint suivant */ }
+            }
+          }
+          if(success){ tSet(statusEl, 'POI Isère chargés.'); }
+          else{ tSet(statusEl, 'Aucun POI trouvé (aire/bbox). Vérifie le réseau.'); }
+        }finally{
+          btn.disabled=false; btn.textContent=prev;
+        }
+      }
+      document.getElementById('loadPoiIsere').addEventListener('click', loadPoiIsere);
+      document.getElementById('togglePoi').addEventListener('change', (e)=>{ if(e.target.checked){ poiLayer.addTo(map); } else { map.removeLayer(poiLayer); } });
+
+      // DatARA WMS/WFS
+      const ext = { wmsLayers: [], wfsLayers: [], visible: true };
+      const extLayerGroup = L.layerGroup().addTo(map);
+      function setExtStatus() { document.getElementById('extLayersCount').textContent = String(ext.wmsLayers.length + ext.wfsLayers.length); }
+      function setStatus(txt){ try{ statusEl.className=''; statusEl.textContent=txt; }catch(_){} }
+
+      async function fetchWmsLayers(capUrl) {
+        const url = capUrl.replace(/\?.*$/, '') + '?service=WMS&request=GetCapabilities';
+        const r = await fetch(url, { headers: { 'Accept': 'application/xml,text/xml' } });
+        if (!r.ok) throw new Error('WMS GetCapabilities HTTP '+r.status);
+        const xml = new DOMParser().parseFromString(await r.text(), 'application/xml');
+        const layers = [...xml.querySelectorAll('Layer > Layer')].map(Ly => {
+          const name = Ly.querySelector('Name')?.textContent || '';
+          const title = Ly.querySelector('Title')?.textContent || name;
+          return { name, title };
+        }).filter(o => o.name);
+        return layers;
+      }
+      document.getElementById('wmsListBtn').onclick = async () => {
+        const base = (document.getElementById('wmsUrl').value || '').trim();
+        const sel = document.getElementById('wmsLayerSel');
+        sel.innerHTML = '<option>Chargement…</option>';
+        try {
+          const list = await fetchWmsLayers(base);
+          if (!list.length) { sel.innerHTML = '<option>Aucune couche</option>'; return; }
+          sel.innerHTML = '';
+          list.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.name; opt.textContent = `${o.title}  [${o.name}]`;
+            sel.appendChild(opt);
+          });
+          setStatus('Couches WMS listées.');
+          localStorage.setItem('wms:lastUrl', base);
+        } catch (e) {
+          sel.innerHTML = '<option>Erreur de lecture</option>';
+          setStatus('Erreur WMS : ' + e.message);
+        }
+      };
+      document.getElementById('wmsAddBtn').onclick = () => {
+        const base = (document.getElementById('wmsUrl').value || '').trim();
+        const name = document.getElementById('wmsLayerSel').value;
+        const opacity = parseFloat(document.getElementById('wmsOpacity').value || '0.8');
+        if (!base || !name) return;
+        const tile = L.tileLayer.wms(base, {
+          layers: name, format: 'image/png', transparent: true, opacity,
+          attribution: 'DatARA / DREAL AURA'
+        }).addTo(extLayerGroup);
+        ext.wmsLayers.push({ layer: name, name, tile });
+        setExtStatus();
+        localStorage.setItem('wms:lastLayer', name);
+      };
+      document.getElementById('wmsOpacity').addEventListener('input', (e) => {
+        const op = parseFloat(e.target.value || '0.8');
+        ext.wmsLayers.forEach(o => o.tile.setOpacity(op));
+      });
+
+      async function fetchWfsTypes(capUrl) {
+        const url = capUrl.replace(/\?.*$/, '') + '?service=WFS&request=GetCapabilities';
+        const r = await fetch(url, { headers: { 'Accept': 'application/xml,text/xml' } });
+        if (!r.ok) throw new Error('WFS GetCapabilities HTTP '+r.status);
+        const xml = new DOMParser().parseFromString(await r.text(), 'application/xml');
+        const types = [...xml.querySelectorAll('FeatureTypeList FeatureType, WFS\\:FeatureTypeList WFS\\:FeatureType')].map(ft => {
+          const n = ft.querySelector('Name, WFS\\:Name')?.textContent || '';
+          const t = ft.querySelector('Title, WFS\\:Title')?.textContent || n;
+          return { name: n, title: t };
+        }).filter(o => o.name);
+        return types;
+      }
+      document.getElementById('wfsListBtn').onclick = async () => {
+        const base = (document.getElementById('wfsUrl').value || '').trim();
+        const sel = document.getElementById('wfsTypeSel');
+        sel.innerHTML = '<option>Chargement…</option>';
+        try {
+          const list = await fetchWfsTypes(base);
+          if (!list.length) { sel.innerHTML = '<option>Aucun type</option>'; return; }
+          sel.innerHTML = '';
+          list.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.name; opt.textContent = `${o.title}  [${o.name}]`;
+            sel.appendChild(opt);
+          });
+          setStatus('Types WFS listés.');
+          localStorage.setItem('wfs:lastUrl', base);
+        } catch (e) {
+          sel.innerHTML = '<option>Erreur de lecture</option>';
+          setStatus('Erreur WFS : ' + e.message);
+        }
+      };
+      document.getElementById('wfsLoadBtn').onclick = async () => {
+        const base = (document.getElementById('wfsUrl').value || '').trim();
+        const typeName = document.getElementById('wfsTypeSel').value;
+        const limit = parseInt(document.getElementById('wfsMaxFeat').value || '1000', 10);
+        if (!base || !typeName) return;
+        const b = map.getBounds();
+        const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',');
+        const url = base.replace(/\?.*$/, '') +
+          `?service=WFS&version=1.1.0&request=GetFeature&typename=${encodeURIComponent(typeName)}` +
+          `&outputFormat=application/json&srsName=EPSG:4326&BBOX=${bbox}&maxFeatures=${limit}`;
+        try {
+          setStatus('Chargement WFS…');
+          const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          if (!r.ok) throw new Error('HTTP '+r.status);
+          const gj = await r.json();
+          const geo = L.geoJSON(gj, {
+            pointToLayer: (feat, latlng) => L.circleMarker(latlng, { radius: 5, color: '#111', weight: 2, fillOpacity: .4 }),
+            style: { color: '#111', weight: 2, fillOpacity: .1 }
+          }).addTo(extLayerGroup);
+          ext.wfsLayers.push({ layer: typeName, name: typeName, geo });
+          setExtStatus();
+          setStatus('Couche WFS chargée.');
+          localStorage.setItem('wfs:lastType', typeName);
+        } catch (e) {
+          setStatus('Erreur WFS : ' + e.message);
+        }
+      };
+      document.getElementById('extToggleAll').onclick = (e) => { e.preventDefault(); ext.visible = !ext.visible; if (ext.visible) extLayerGroup.addTo(map); else map.removeLayer(extLayerGroup); };
+      document.getElementById('extClearAll').onclick = (e) => { e.preventDefault(); extLayerGroup.clearLayers(); ext.wmsLayers = []; ext.wfsLayers = []; setExtStatus(); };
+      (function restoreExtInputs(){ const wmsU = localStorage.getItem('wms:lastUrl'); if (wmsU) document.getElementById('wmsUrl').value = wmsU; const wfsU = localStorage.getItem('wfs:lastUrl'); if (wfsU) document.getElementById('wfsUrl').value = wfsU; })();
+
+      // Producteur par défaut
+      const DEFAULT_ADDR='210 Les Espinasses, 38250 Villard-de-Lans, France';
+      const DEFAULT_FALLBACK={lat:45.073, lng:5.55};
+      async function geocodeDefault(addr){
+        try{ const r=await fetch('https://photon.komoot.io/api/?q='+encodeURIComponent(addr)+'&lang=fr&limit=1'); if(r.ok){ const j=await r.json(); const f=j.features?.[0]; if(f) return {lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0]}; } }catch(_){}
+        try{ const r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(addr)); if(r.ok){ const j=await r.json(); const f=j[0]; if(f) return {lat:+f.lat, lng:+f.lon}; } }catch(_){}
+        return null;
+      }
+      async function initDefaultProducer(){
+        try{ const saved=localStorage.getItem('defaultProducer');
+          if(saved){ const o=JSON.parse(saved); if(o && o.lat && o.lng){ addParticipant(o.lat,o.lng,'producer', o.name||'Producteur'); if(!document.getElementById('projName').value) document.getElementById('projName').value='Projet 1'; tSet(statusEl,'Producteur par défaut chargé.'); return; }
+        }}catch(_){ }
+        const g=await geocodeDefault(DEFAULT_ADDR);
+        if(g){ addParticipant(g.lat,g.lng,'producer','Producteur — défaut'); try{ localStorage.setItem('defaultProducer', JSON.stringify({lat:g.lat,lng:g.lng,name:'Producteur — défaut'})); }catch(_){ } tSet(statusEl,'Producteur par défaut géocodé.'); }
+        else { addParticipant(DEFAULT_FALLBACK.lat, DEFAULT_FALLBACK.lng,'producer','Producteur — approx.'); tSet(statusEl,'Producteur par défaut approx.'); }
+      }
+      document.getElementById('resetDefaultBtn').addEventListener('click', ()=>{ try{ localStorage.removeItem('defaultProducer'); tSet(statusEl,'Producteur par défaut réinitialisé.'); }catch(_){ } });
+
+      // Import participants
+      document.getElementById('importBtn').onclick = ()=>{
+        const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return;
+        let ok=0,ko=0; txt.split(/\r?\n/).forEach(line=>{
+          if(!line.trim()) return; const p=line.split(/[;,]|\t/).map(s=>s.trim());
+          if(p.length<4){ko++;return;} const [name,latS,lonS,typeS]=p;
+          const lat=+latS, lng=+lonS; if(!isFinite(lat)||!isFinite(lng)){ko++;return;}
+          let t=(typeS||'').toLowerCase(); if(t.startsWith('cons')) t='consumer'; else if(t.startsWith('prod')) t='producer'; else {ko++;return;}
+          addParticipant(lat,lng,t,name); ok++;
+        });
+        tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`);
+      };
+
+      // Chronologie ACC
+      const TL_LS_KEY = 'acc_timeline_v1';
+      const defaultTimeline = [
+        {title:'Cadrage & objectifs', tip:'Objectifs éco/sociaux/territoriaux', due:'', done:false},
+        {title:'Recrutement consommateurs', tip:'Démarrer ~6 mois avant lancement', due:'', done:false},
+        {title:'Étude faisabilité centrale', tip:'PV/hydro/éolien, conformité', due:'', done:false},
+        {title:'Étude ACC (énergie/éco/financier)', tip:'Scénarios, TURPE, clés de répartition', due:'', done:false},
+        {title:'Création/identification PMO', tip:'Association/SAS… obligations PMO', due:'', done:false},
+        {title:'Adhésions des participants à la PMO', tip:'Statuts, bulletins', due:'', done:false},
+        {title:'Déclaration + Convention ACC (Enedis)', tip:'Signature ≥1 mois après raccordement', due:'', done:false},
+        {title:'Contrats producteurs↔consommateurs', tip:'Gré à gré (particuliers ≤1 an)', due:'', done:false},
+        {title:'Démarrage opération', tip:'1er du mois suivant la signature', due:'', done:false},
+        {title:'Exploitation & reporting', tip:'Données mensuelles GRD / PMO', due:'', done:false}
+      ];
+      function loadTL(){ try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)) || defaultTimeline.slice(); }catch(_){ return defaultTimeline.slice(); } }
+      function saveTL(items){ try{ localStorage.setItem(TL_LS_KEY, JSON.stringify(items)); }catch(_){ } }
+      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&gt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+      function renderTL(){
+        const root = document.getElementById('accTimeline');
+        const items = loadTL();
+        const today = new Date().toISOString().slice(0,10);
+        const tbl = document.createElement('table'); tbl.className='tl-table';
+        tbl.innerHTML = `
+          <thead><tr>
+            <th style="width:28px">✓</th>
+            <th>Étape</th>
+            <th>Note</th>
+            <th style="width:150px">Échéance</th>
+            <th style="width:110px">Actions</th>
+          </tr></thead>
+          <tbody></tbody>`;
+        const tb = tbl.querySelector('tbody');
+        items.forEach((it, idx)=>{
+          const overdue = it.due && !it.done && it.due < today;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><input type="checkbox" ${it.done?'checked':''} data-idx="${idx}"></td>
+            <td>${escapeHtml(it.title)}</td>
+            <td>${escapeHtml(it.tip||'')}</td>
+            <td>
+              <input type="date" value="${it.due||''}" data-idx="${idx}" class="tl-date" style="width:140px">
+              ${overdue?'<div class="tl-overdue">En retard</div>': (it.done?'<div class="tl-done">Terminé</div>':'')}
+            </td>
+            <td>
+              <button class="btn secondary tl-up" data-idx="${idx}" title="Monter">↑</button>
+              <button class="btn secondary tl-down" data-idx="${idx}" title="Descendre">↓</button>
+              <button class="btn secondary tl-del" data-idx="${idx}" title="Supprimer">✕</button>
+            </td>`;
+          tb.appendChild(tr);
+        });
+        root.innerHTML = ''; root.appendChild(tbl);
+
+        root.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+          cb.addEventListener('change', e=>{
+            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].done = e.target.checked; saveTL(arr); renderTL();
+          });
+        });
+        root.querySelectorAll('.tl-date').forEach(inp=>{
+          inp.addEventListener('change', e=>{
+            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].due = e.target.value; saveTL(arr); renderTL();
+          });
+        });
+        root.querySelectorAll('.tl-up').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i>0){ [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; saveTL(arr); renderTL(); }});
+        root.querySelectorAll('.tl-down').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i<arr.length-1){ [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; saveTL(arr); renderTL(); }});
+        root.querySelectorAll('.tl-del').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); arr.splice(i,1); saveTL(arr); renderTL(); });
+      }
+      document.getElementById('tlAddStep').onclick = ()=>{
+        const title = prompt('Intitulé de la nouvelle étape :'); if(!title) return;
+        const tip = prompt('Note (optionnel) :') || '';
+        const due = prompt('Échéance (YYYY-MM-DD, optionnel) :') || '';
+        const arr = loadTL(); arr.push({title, tip, due, done:false}); saveTL(arr); renderTL();
+      };
+      document.getElementById('tlClear').onclick = ()=>{
+        if(confirm('Réinitialiser la chronologie aux valeurs par défaut ?')){ saveTL(defaultTimeline.slice()); renderTL(); }
+      };
+      document.getElementById('tlExportCsv').onclick = ()=>{
+        const arr = loadTL();
+        const csv = [
+          'title;note;due;done',
+          ...arr.map(it=>[
+            `"${String(it.title).replace(/"/g,'""')}"`,
+            `"${String(it.tip||'').replace(/"/g,'""')}"`,
+            it.due||'',
+            it.done?'1':'0'
+          ].join(';'))
+        ].join('\n');
+        const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'chronologie_acc.csv'; a.click();
+        URL.revokeObjectURL(url);
+      };
+      renderTL();
+
+      // Lancer
+      try{ initDefaultProducer(); }catch(_){ }
+      layout();
+      tSet(statusEl,'Prêt.');
+      window.addEventListener('error', e=>{ tSet(statusEl,'Erreur JS : '+e.message); });
+      window.addEventListener('unhandledrejection', e=>{ tSet(statusEl,'Erreur Promesse : '+(e.reason?.message||e.reason)); });
+    }
+  </script>
+</body>
+</html>
