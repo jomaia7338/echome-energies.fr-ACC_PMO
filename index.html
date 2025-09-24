@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACC – Centre libre (diamètre) + POI Incendie + Chronologie</title>
+  <title>ACC – Centre libre (diamètre) + POI Incendie</title>
 
   <!-- Leaflet CSS (+ fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
@@ -63,13 +63,6 @@
 
     /* Centre libre (tooltip) */
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-
-    /* Chronologie ACC */
-    .tl-table{width:100%;border-collapse:collapse;font-size:13px}
-    .tl-table th,.tl-table td{border:1px solid var(--line);padding:6px}
-    .tl-table th{background:#f9fafb;text-align:left}
-    .tl-done{color:#0f766e;font-weight:600}
-    .tl-overdue{color:#b91c1c;font-weight:600}
 
     /* PRINT */
     .print-header{display:none}
@@ -211,20 +204,6 @@
         <div style="margin-top:6px"><button id="resetDefaultBtn" class="btn secondary">Réinitialiser le défaut</button></div>
       </fieldset>
 
-      <!-- Chronologie ACC (Enogrid) -->
-      <fieldset>
-        <legend>Chronologie ACC</legend>
-        <div class="small" style="margin-bottom:6px">
-          Référence : Enogrid — Chronologie ACC (06/08/2025). Étapes non exhaustives.
-        </div>
-        <div id="accTimeline"></div>
-        <div class="row" style="margin-top:8px">
-          <button id="tlAddStep" class="btn secondary">Ajouter une étape</button>
-          <button id="tlExportCsv" class="btn">Exporter CSV</button>
-          <button id="tlClear" class="btn secondary">Réinitialiser</button>
-        </div>
-      </fieldset>
-
       <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span></div>
     </div>
   </aside>
@@ -248,7 +227,7 @@
 
       // Utils
       const eps = 1e-9; const toRad = d => d*Math.PI/180;
-      const esc = s => String(s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      const esc = s => String(s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c]}));
       const safeText = s => String(s ?? '');
       const tSet = (el,txt,cls='')=>{ el.className=cls; el.textContent=txt; };
       const hSet = (el,html,cls='')=>{ el.className=cls; el.innerHTML=html; };
@@ -307,7 +286,12 @@
       });
       map.whenReady(() => { map.addControl(new RatioControl()); });
 
-      function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height=h+'px'; try{ map.invalidateSize(); }catch(_){ } }
+      function layout(){
+        const H=document.querySelector('header.slim');
+        const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16);
+        mapEl.style.height=h+'px';
+        try{ map.invalidateSize(); }catch(_){ }
+      }
       window.addEventListener('resize', layout); setTimeout(layout, 50);
 
       // Données
@@ -316,7 +300,6 @@
       let uid=0;
       let vizCircle=null; // cercle visuel ACC (diamètre)
       const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
-      const strokeOutside='#9CA3AF';
 
       // Couches
       const participantLayer = L.layerGroup().addTo(map);
@@ -324,8 +307,16 @@
 
       // UI helpers
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
-      function currentDiameter(){ const sel=document.getElementById('limitSel').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
-      function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
+      function currentDiameter(){
+        const sel=document.getElementById('limitSel').value;
+        if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; }
+        return parseFloat(sel);
+      }
+      function updateCount(){
+        const c=document.getElementById('count');
+        const n=participants.length, np=participants.filter(p=>p.type==='producer').length;
+        c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.';
+      }
       function setPoiStats(){ poiStatsEl.textContent = `${pois.length} chargé(s)`; }
 
       // Ajout PARTICIPANT (clic carte)
@@ -337,7 +328,7 @@
         m.bindPopup(makeParticipantPopup(entry));
         m.on('contextmenu', ()=> removeParticipant(id));
         participants.push(entry);
-        refreshACC(true); // recalcul ACC uniquement (les POI n'influencent pas)
+        refreshACC(true); // recalc centre libre
       }
       function makeParticipantPopup(entry){
         const wrap=document.createElement('div');
@@ -358,23 +349,15 @@
       }
       map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
-      // Ajout POI (ne déclenche ni recalc ni fitBounds)
+      // Ajout POI (visualisation seule)
       function addPOI(lat,lng,kind,name){
         const id=++uid; const label=name||kind||'POI';
         const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
         const entry={id,name:label,kind,lat,lng,marker:m};
         m.bindTooltip(`${safeText(label)} — ${kind||'incendie'}`);
-        m.bindPopup(makePoiPopup(entry));
         pois.push(entry);
         setPoiStats();
-        updatePoiInRange(); // juste la mise à jour d'info si le centre existe
-      }
-      function makePoiPopup(entry){
-        const wrap=document.createElement('div');
-        const title=document.createElement('strong'); title.textContent=entry.name||'POI'; wrap.appendChild(title);
-        wrap.appendChild(document.createElement('br'));
-        wrap.appendChild(document.createTextNode(entry.kind||'incendie'));
-        return wrap;
+        updatePoiInRange(); // met à jour le compteur si un centre est déjà affiché
       }
 
       // ACC core (ne dépend que des participants)
@@ -604,7 +587,8 @@
         return null;
       }
       async function initDefaultProducer(){
-        try{ const saved=localStorage.getItem('defaultProducer');
+        try{
+          const saved=localStorage.getItem('defaultProducer');
           if(saved){ const o=JSON.parse(saved); if(o && o.lat && o.lng){ addParticipant(o.lat,o.lng,'producer', o.name||'Producteur'); if(!document.getElementById('projName').value) document.getElementById('projName').value='Projet 1'; tSet(statusEl,'Producteur par défaut chargé.'); return; }
         }}catch(_){ }
         const g=await geocodeDefault(DEFAULT_ADDR);
@@ -626,103 +610,34 @@
         tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`);
       };
 
-      // Chronologie ACC (Enogrid) — checklist locale
-      const TL_LS_KEY = 'acc_timeline_v1';
-      const defaultTimeline = [
-        {title:'Cadrage & objectifs', tip:'Objectifs éco/sociaux/territoriaux', due:'', done:false},
-        {title:'Recrutement consommateurs', tip:'Démarrer ~6 mois avant lancement', due:'', done:false},
-        {title:'Étude faisabilité centrale', tip:'PV/hydro/éolien, conformité', due:'', done:false},
-        {title:'Étude ACC (énergie/éco/financier)', tip:'Scénarios, TURPE, clés de répartition', due:'', done:false},
-        {title:'Création/identification PMO', tip:'Association/SAS… obligations PMO', due:'', done:false},
-        {title:'Adhésions des participants à la PMO', tip:'Statuts, bulletins', due:'', done:false},
-        {title:'Déclaration + Convention ACC (Enedis)', tip:'Signature ≥1 mois après raccordement', due:'', done:false},
-        {title:'Contrats producteurs↔consommateurs', tip:'Gré à gré (particuliers ≤1 an)', due:'', done:false},
-        {title:'Démarrage opération', tip:'1er du mois suivant la signature', due:'', done:false},
-        {title:'Exploitation & reporting', tip:'Données mensuelles GRD / PMO', due:'', done:false}
-      ];
-      function loadTL(){ try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)) || defaultTimeline.slice(); }catch(_){ return defaultTimeline.slice(); } }
-      function saveTL(items){ try{ localStorage.setItem(TL_LS_KEY, JSON.stringify(items)); }catch(_){ } }
-      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-      function renderTL(){
-        const root = document.getElementById('accTimeline');
-        const items = loadTL();
-        const today = new Date().toISOString().slice(0,10);
-        const tbl = document.createElement('table'); tbl.className='tl-table';
-        tbl.innerHTML = `
-          <thead><tr>
-            <th style="width:28px">✓</th>
-            <th>Étape</th>
-            <th>Note</th>
-            <th style="width:150px">Échéance</th>
-            <th style="width:110px">Actions</th>
-          </tr></thead>
-          <tbody></tbody>`;
-        const tb = tbl.querySelector('tbody');
-        items.forEach((it, idx)=>{
-          const overdue = it.due && !it.done && it.due < today;
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><input type="checkbox" ${it.done?'checked':''} data-idx="${idx}"></td>
-            <td>${escapeHtml(it.title)}</td>
-            <td>${escapeHtml(it.tip||'')}</td>
-            <td>
-              <input type="date" value="${it.due||''}" data-idx="${idx}" class="tl-date" style="width:140px">
-              ${overdue?'<div class="tl-overdue">En retard</div>': (it.done?'<div class="tl-done">Terminé</div>':'')}
-            </td>
-            <td>
-              <button class="btn secondary tl-up" data-idx="${idx}" title="Monter">↑</button>
-              <button class="btn secondary tl-down" data-idx="${idx}" title="Descendre">↓</button>
-              <button class="btn secondary tl-del" data-idx="${idx}" title="Supprimer">✕</button>
-            </td>`;
-          tb.appendChild(tr);
-        });
-        root.innerHTML = ''; root.appendChild(tbl);
-
-        root.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
-          cb.addEventListener('change', e=>{
-            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].done = e.target.checked; saveTL(arr); renderTL();
-          });
-        });
-        root.querySelectorAll('.tl-date').forEach(inp=>{
-          inp.addEventListener('change', e=>{
-            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].due = e.target.value; saveTL(arr); renderTL();
-          });
-        });
-        root.querySelectorAll('.tl-up').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i>0){ [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; saveTL(arr); renderTL(); }});
-        root.querySelectorAll('.tl-down').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i<arr.length-1){ [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; saveTL(arr); renderTL(); }});
-        root.querySelectorAll('.tl-del').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); arr.splice(i,1); saveTL(arr); renderTL(); });
-      }
-      document.getElementById('tlAddStep').onclick = ()=>{
-        const title = prompt('Intitulé de la nouvelle étape :'); if(!title) return;
-        const tip = prompt('Note (optionnel) :') || '';
-        const due = prompt('Échéance (YYYY-MM-DD, optionnel) :') || '';
-        const arr = loadTL(); arr.push({title, tip, due, done:false}); saveTL(arr); renderTL();
-      };
-      document.getElementById('tlClear').onclick = ()=>{
-        if(confirm('Réinitialiser la chronologie aux valeurs par défaut ?')){ saveTL(defaultTimeline.slice()); renderTL(); }
-      };
-      document.getElementById('tlExportCsv').onclick = ()=>{
-        const arr = loadTL();
-        const csv = [
-          'title;note;due;done',
-          ...arr.map(it=>[
-            `"${String(it.title).replace(/"/g,'""')}"`,
-            `"${String(it.tip||'').replace(/"/g,'""')}"`,
-            it.due||'',
-            it.done?'1':'0'
-          ].join(';'))
-        ].join('\n');
-        const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'chronologie_acc.csv'; a.click();
-        URL.revokeObjectURL(url);
-      };
-      renderTL();
-
       // Lancer
       try{ initDefaultProducer(); }catch(_){ }
       layout();
       tSet(statusEl,'Prêt.');
+
+      // Impression (attente tuiles)
+      function updatePrintHeader(){
+        const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
+        const D=document.getElementById('limitSel').value==='custom'
+          ? (document.getElementById('customKm').value||'—')
+          : document.getElementById('limitSel').value;
+        const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
+        document.getElementById('printMeta').textContent = `${name} — D=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
+      }
+      async function ensureTilesReady(timeout=2000){
+        return new Promise(resolve=>{
+          const start=Date.now(); const tiles=[...document.querySelectorAll('.leaflet-tile')];
+          if(tiles.length===0){ resolve(); return; }
+          let remaining=tiles.length; const done=()=>{ if(--remaining<=0 || (Date.now()-start)>timeout) resolve(); };
+          tiles.forEach(img=>{ if(img.complete && img.naturalWidth>0){ done(); } else { img.addEventListener('load',done,{once:true}); img.addEventListener('error',done,{once:true}); } });
+          setTimeout(resolve, timeout);
+        });
+      }
+      document.getElementById('printBtn').onclick = async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(2000); window.print(); };
+      window.addEventListener('beforeprint', async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(1500); });
+      window.addEventListener('afterprint', ()=>{ setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 100); });
+
+      // Diagnostics visibles
       window.addEventListener('error', e=>{ tSet(statusEl,'Erreur JS : '+e.message); });
       window.addEventListener('unhandledrejection', e=>{ tSet(statusEl,'Erreur Promesse : '+(e.reason?.message||e.reason)); });
     }
