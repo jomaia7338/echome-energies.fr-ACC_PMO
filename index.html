@@ -37,10 +37,10 @@
     #status.ok{background:rgba(55,195,175,.08);border-color:rgba(55,195,175,.45);color:#116a60}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
 
-    #map{min-height:420px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
+    #map{min-height:520px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
 
     /* Drawer */
-    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:380px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
+    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:400px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
     #drawer.open{transform:none}
     #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
     #drawer h2{font-family:'Montserrat',sans-serif;font-size:16px;margin:0}
@@ -62,13 +62,6 @@
     }
 
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-
-    /* Chronologie ACC */
-    .tl-table{width:100%;border-collapse:collapse;font-size:13px}
-    .tl-table th,.tl-table td{border:1px solid var(--line);padding:6px}
-    .tl-table th{background:#f9fafb;text-align:left}
-    .tl-done{color:#0f766e;font-weight:600}
-    .tl-overdue{color:#b91c1c;font-weight:600}
 
     /* PRINT */
     .print-header{display:none}
@@ -114,8 +107,8 @@
         <label class="small">Diamètre :</label>
         <select id="limitSel" aria-label="Diamètre autorisé">
           <option value="2">2 km</option>
-          <option value="10">10 km</option>
-          <option value="20" selected>20 km</option>
+          <option value="10" selected>10 km</option>
+          <option value="20">20 km</option>
           <option value="custom">Perso</option>
         </select>
         <input id="customKm" type="number" min="0" step="0.1" placeholder="km" style="width:90px;display:none" aria-label="Diamètre personnalisé">
@@ -190,6 +183,20 @@
       </fieldset>
 
       <fieldset>
+        <legend>Zone ACC & candidats consommateurs (OSM)</legend>
+        <div class="small">La zone ACC est l'intersection des disques de diamètre D autour de chaque participant. Charge des candidats (écoles, santé, admin, sport, retail…) <em>dans la zone</em>.</div>
+        <div class="row" style="margin-top:6px">
+          <label class="small"><input type="checkbox" class="cand" value="school" checked> Éducation</label>
+          <label class="small"><input type="checkbox" class="cand" value="health" checked> Santé</label>
+          <label class="small"><input type="checkbox" class="cand" value="admin" checked> Administration</label>
+          <label class="small"><input type="checkbox" class="cand" value="sport"> Sport</label>
+          <label class="small"><input type="checkbox" class="cand" value="retail"> Retail</label>
+          <button id="loadCandidates" class="btn">Charger candidats</button>
+          <span class="small">Candidats : <span id="candCount">0</span></span>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Points d’intérêt “Incendie & Secours”</legend>
         <div class="small">OSM/Overpass – Isère. Noms/opérateurs contenant : SDIS, SDMIS, STIS, SLIS (autres casernes incluses).</div>
         <div class="row" style="margin-top:6px">
@@ -202,9 +209,8 @@
       <fieldset>
         <legend>Données AURA (WMS/WFS DatARA)</legend>
         <div class="small" style="margin-bottom:6px">
-          Source: DatARA (WMS/WFS). Choisis une couche ou un type puis affiche-la sur la carte.
+          Source: DatARA. Sur GitHub Pages, le listing peut échouer (CORS). Préfère un lancement en local (http://localhost).
         </div>
-
         <!-- WMS -->
         <div class="row" style="gap:6px;align-items:flex-start">
           <div style="flex:1;min-width:260px">
@@ -214,7 +220,10 @@
           <div><button id="wmsListBtn" class="btn secondary">Lister couches</button></div>
         </div>
         <div class="row" style="margin-top:6px">
-          <select id="wmsLayerSel" style="flex:1;min-width:260px"></select>
+          <input id="wmsFilter" type="text" placeholder="Filtrer les noms…" style="flex:1;min-width:180px">
+          <select id="wmsLayerSel" style="flex:2;min-width:260px" size="6"></select>
+        </div>
+        <div class="row" style="margin-top:6px">
           <button id="wmsAddBtn" class="btn">Afficher</button>
           <label class="small" style="display:flex;align-items:center;gap:6px">Opacité <input id="wmsOpacity" type="range" min="0" max="1" step="0.05" value="0.8"></label>
         </div>
@@ -228,7 +237,10 @@
           <div><button id="wfsListBtn" class="btn secondary">Lister types</button></div>
         </div>
         <div class="row" style="margin-top:6px">
-          <select id="wfsTypeSel" style="flex:1;min-width:260px"></select>
+          <input id="wfsFilter" type="text" placeholder="Filtrer les noms…" style="flex:1;min-width:180px">
+          <select id="wfsTypeSel" style="flex:2;min-width:260px" size="6"></select>
+        </div>
+        <div class="row" style="margin-top:6px">
           <button id="wfsLoadBtn" class="btn">Charger (emprise)</button>
           <label class="small" title="Limiter le nombre d'entités">Max <input id="wfsMaxFeat" type="number" min="50" step="50" value="1000" style="width:80px"></label>
         </div>
@@ -255,19 +267,6 @@
         <div style="margin-top:6px"><button id="resetDefaultBtn" class="btn secondary">Réinitialiser le défaut</button></div>
       </fieldset>
 
-      <fieldset>
-        <legend>Chronologie ACC</legend>
-        <div class="small" style="margin-bottom:6px">
-          Référence : Enogrid — Chronologie ACC (indicative). Étapes non exhaustives.
-        </div>
-        <div id="accTimeline"></div>
-        <div class="row" style="margin-top:8px">
-          <button id="tlAddStep" class="btn secondary">Ajouter une étape</button>
-          <button id="tlExportCsv" class="btn">Exporter CSV</button>
-          <button id="tlClear" class="btn secondary">Réinitialiser</button>
-        </div>
-      </fieldset>
-
       <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span></div>
     </div>
   </aside>
@@ -287,6 +286,7 @@
       const statusEl = document.getElementById('status');
       const poiStatsEl = document.getElementById('poiStats');
       const poiInRangeEl = document.getElementById('poiInRange');
+      const candCountEl = document.getElementById('candCount');
       const mapEl = document.getElementById('map');
 
       // Utils
@@ -298,9 +298,18 @@
       const fmtDate=(d)=>{ const p=n=>String(n).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
       function haversineKm(a,b){ const R=6371; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng);
         const lat1=toRad(a.lat), lat2=toRad(b.lat);
-        const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+        const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(Math.max(0, dLon)/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 
-      // MEC utils (points: {lat,lng})
+      // Projection locale (mètres) pour calculs géométriques
+      function projector(lat0, lon0){
+        const cos = Math.cos(lat0*Math.PI/180);
+        return {
+          toXY: (lat,lng)=>({x:(lng-lon0)*111320*cos, y:(lat-lat0)*111320}),
+          toLL: (x,y)=>({lat: lat0 + y/111320, lng: lon0 + x/(111320*cos)})
+        };
+      }
+
+      // MEC utils
       function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length;
         const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32})); return {lat0,lon0,P}; }
       function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng: lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
@@ -321,6 +330,54 @@
         }
         if(!best){ let max=-1,a=-1,b=-1; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const d=dist2(P[i],P[j]); if(d>max){max=d;a=i;b=j;} } best=circleBy2(P[a],P[b]); }
         const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r};
+      }
+
+      // Polygone intersection de cercles (Sutherland–Hodgman)
+      function circlePolygonXY(cx, cy, Rm, N=128){
+        const pts=[]; for(let i=0;i<N;i++){ const t=2*Math.PI*i/N; pts.push({x: cx + Rm*Math.cos(t), y: cy + Rm*Math.sin(t)}); } return pts;
+      }
+      function clipPoly(subject, clip){
+        function inside(p, a, b){ return (b.x - a.x)*(p.y - a.y) - (b.y - a.y)*(p.x - a.x) >= 0; }
+        function intersect(a, b, p, q){
+          const A = {x: b.x - a.x, y: b.y - a.y};
+          const B = {x: q.x - p.x, y: q.y - p.y};
+          const den = A.x*B.y - A.y*B.x;
+          if (Math.abs(den) < 1e-12) return b;
+          const s = ((p.x - a.x)*B.y - (p.y - a.y)*B.x) / den;
+          return { x: a.x + s*A.x, y: a.y + s*A.y };
+        }
+        let output = subject.slice();
+        for (let i=0;i<clip.length;i++){
+          const a = clip[i], b = clip[(i+1)%clip.length];
+          const input = output.slice();
+          output = [];
+          for (let j=0;j<input.length;j++){
+            const P = input[j], Q = input[(j+1)%input.length];
+            const Pin = inside(P, a, b), Qin = inside(Q, a, b);
+            if (Pin && Qin){ output.push(Q); }
+            else if (Pin && !Qin){ output.push(intersect(P, Q, a, b)); }
+            else if (!Pin && Qin){ output.push(intersect(P, Q, a, b)); output.push(Q); }
+          }
+          if(output.length===0) break;
+        }
+        return output;
+      }
+      function polygonLLfromDisks(points, Dkm){
+        if(!points.length) return null;
+        const Rm = (Dkm/2)*1000;
+        const lat0 = points.reduce((s,p)=>s+p.lat,0)/points.length;
+        const lon0 = points.reduce((s,p)=>s+p.lng,0)/points.length;
+        const prj = projector(lat0,lon0);
+        let subject = [
+          {x:-50000,y:-50000},{x:50000,y:-50000},{x:50000,y:50000},{x:-50000,y:50000}
+        ];
+        for(const p of points){
+          const xy = prj.toXY(p.lat, p.lng);
+          const circ = circlePolygonXY(xy.x, xy.y, Rm, 128);
+          subject = clipPoly(subject, circ);
+          if(!subject.length) return null;
+        }
+        return subject.map(pt => prj.toLL(pt.x, pt.y));
       }
 
       // Carte
@@ -344,23 +401,26 @@
           const c=this._map.getCenter(), z=this._map.getZoom();
           if(z==null){ this._div.textContent='Échelle —'; return; }
           const mpp = 156543.03392 * Math.cos(c.lat*Math.PI/180) / Math.pow(2, z);
-          const denom = Math.max(1, Math.round(mpp / 0.0002645833333)); // 0.26458 mm/px
+          const denom = Math.max(1, Math.round(mpp / 0.0002645833333));
           this._div.textContent = 'Échelle ~ 1:' + denom.toLocaleString('fr-FR');
         }
       });
       map.whenReady(() => { map.addControl(new RatioControl()); });
 
-      function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height=h+'px'; try{ map.invalidateSize(); }catch(_){ } }
+      function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(520, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height=h+'px'; try{ map.invalidateSize(); }catch(_){ } }
       window.addEventListener('resize', layout); setTimeout(layout, 50);
 
       // Données
       const participants=[]; // {id,name,type,lat,lng,marker}
       const pois=[];         // {id,name,kind,lat,lng,marker}
       let uid=0;
-      let vizCircle=null; // cercle visuel ACC (diamètre)
+      let vizCircle=null; // cercle visuel (r=D/2)
+      let zoneAccPoly=null; // L.polygon de la zone
       const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
       const participantLayer = L.layerGroup().addTo(map);
       const poiLayer = L.layerGroup().addTo(map);
+      const zoneLayer = L.layerGroup().addTo(map);       // zone ACC + cercle
+      const candidateLayer = L.layerGroup().addTo(map);  // candidats consommateurs
       window.__participants__ = participants;
 
       // UI helpers
@@ -373,9 +433,9 @@
         return parseFloat(sel);
       }
       function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
-      function setPoiStats(){ poiStatsEl.textContent = `${pois.length} chargé(s)`; }
+      function setPoiStats(){ if(poiStatsEl) poiStatsEl.textContent = `${pois.length} chargé(s)`; }
 
-      // Ajout PARTICIPANT (clic carte)
+      // Ajout PARTICIPANT
       function addParticipant(lat,lng,type,name){
         const id=++uid; const label=name || `${type} ${id}`;
         const m=L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3}).addTo(participantLayer);
@@ -405,28 +465,37 @@
       }
       map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
-      // Ajout POI (ne déclenche pas le calcul)
+      // POI incendie
       function addPOI(lat,lng,kind,name){
         const id=++uid; const label=name||kind||'POI';
         const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
         const entry={id,name:label,kind,lat,lng,marker:m};
         m.bindTooltip(`${safeText(label)} — ${kind||'incendie'}`);
-        m.bindPopup(makePoiPopup(entry));
         pois.push(entry);
         setPoiStats();
         updatePoiInRange();
       }
-      function makePoiPopup(entry){
-        const wrap=document.createElement('div');
-        const title=document.createElement('strong'); title.textContent=entry.name||'POI'; wrap.appendChild(title);
-        wrap.appendChild(document.createElement('br'));
-        wrap.appendChild(document.createTextNode(entry.kind||'incendie'));
-        return wrap;
+
+      // Zone ACC : intersection des disques
+      function clearZone(){ zoneLayer.clearLayers(); zoneAccPoly=null; if(vizCircle){ zoneLayer.removeLayer(vizCircle); vizCircle=null; } }
+      function updateZone(D){
+        clearZone();
+        if(!participants.length) return;
+        const mec = minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng})));
+        const R = D/2;
+        if(mec){
+          vizCircle = L.circle([mec.center.lat,mec.center.lng],{ radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6' })
+            .addTo(zoneLayer).bindTooltip('Centre libre (visualisation)',{className:'center-free-tip'});
+        }
+        const pts = participants.map(p=>({lat:p.lat,lng:p.lng}));
+        const polyLL = polygonLLfromDisks(pts, D);
+        if(polyLL && polyLL.length>=3){
+          zoneAccPoly = L.polygon(polyLL, {color:'#2563eb', weight:2, fillColor:'#3b82f6', fillOpacity:.12}).addTo(zoneLayer);
+        }
       }
 
-      // ACC core (ne dépend que des participants)
-      function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } }
       function styleParticipants(center, R){
+        if(!center){ participants.forEach(p=> p.marker.setStyle({color:colors[p.type], weight:2, fillColor:colors[p.type], fillOpacity:.3})); return; }
         participants.forEach(p=>{
           const d = haversineKm(center,{lat:p.lat,lng:p.lng});
           const inside = d <= R + eps;
@@ -438,40 +507,38 @@
           });
         });
       }
+
       function refreshACC(autoFit=false){
         updateCount();
         const D=currentDiameter(); const R=D/2;
-        clearVizCircle();
-        if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); poiInRangeEl.textContent='0'; return; }
-        if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); poiInRangeEl.textContent='0'; return; }
+        clearZone();
+        if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); if(poiInRangeEl) poiInRangeEl.textContent='0'; styleParticipants(null,0); return; }
+        if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); if(poiInRangeEl) poiInRangeEl.textContent='0'; styleParticipants(null,0); return; }
 
         const mec = minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng})));
-        if(!mec){ tSet(statusEl,'Centre libre non calculable.'); poiInRangeEl.textContent='0'; return; }
-        const pass = mec.r <= R + eps;
-
-        vizCircle = L.circle([mec.center.lat,mec.center.lng],{ radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6' })
-          .addTo(map).bindTooltip('Centre libre (visualisation) — centre non défini',{className:'center-free-tip'});
-
-        styleParticipants(mec.center, R);
+        const pass = mec ? (mec.r <= R + eps) : false;
+        if(mec){
+          const outside = participants.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > R + eps).map(p=> p.name||p.type);
+          if(pass){
+            hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok');
+          }else{
+            hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko');
+          }
+          styleParticipants(mec.center, R);
+        }
+        updateZone(D);
 
         if(autoFit && participants.length>1){
           const g=L.featureGroup(participants.map(p=>p.marker));
           map.fitBounds(g.getBounds().pad(0.25));
         }
 
-        const outside = participants.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > R + eps).map(p=> p.name||p.type);
-        if(pass){
-          hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok');
-        }else{
-          hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko');
-        }
-
-        updatePoiInRange(mec.center, R); // info uniquement
+        updatePoiInRange(mec?mec.center:null, R);
       }
 
       function updatePoiInRange(center=null, R=null){
         if(!center || R==null){
-          if(!vizCircle){ poiInRangeEl.textContent='0'; return; }
+          if(!vizCircle){ if(poiInRangeEl) poiInRangeEl.textContent='0'; return; }
           center = vizCircle.getLatLng(); R = (vizCircle.getRadius()||0)/1000;
         }
         let cnt=0;
@@ -486,7 +553,7 @@
           });
           p.marker.bindTooltip(`${safeText(p.name)} — ${inside ? 'dans D/2' : 'hors D/2'}`);
         });
-        poiInRangeEl.textContent = String(cnt);
+        if(poiInRangeEl) poiInRangeEl.textContent = String(cnt);
       }
 
       // UI top bar
@@ -495,7 +562,7 @@
       document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
       document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
 
-      // SIS participant → force D=20 km (désactive le sélecteur)
+      // SIS participant → force D=20 km
       const sisCheck = document.getElementById('sisCheck');
       sisCheck.addEventListener('change', ()=>{
         const sel=document.getElementById('limitSel');
@@ -505,12 +572,11 @@
         refreshACC();
       });
 
-      // Bouton “Ouvrir un fichier projet…”
+      // Bouton “Ouvrir…”, Cmd/Ctrl+O
       document.getElementById('openProjBtn').onclick = () => {
         const inp = document.getElementById('importJson');
         if (inp) inp.click();
       };
-      // Cmd/Ctrl + O (hors saisie)
       window.addEventListener('keydown', (e) => {
         const tag = (e.target && e.target.tagName || '').toUpperCase();
         const typing = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable);
@@ -543,7 +609,7 @@
       document.getElementById('gearBtn').onclick = ()=>{ refreshProjectList(); drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); };
       document.getElementById('drawerClose').onclick = ()=>{ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); };
 
-      // Projets (participants seulement)
+      // Projets
       function captureState(){ return {
         name: (document.getElementById('projName').value||'Projet 1').trim()||'Projet 1',
         settings: { diameterSel: document.getElementById('limitSel').value, customKm: document.getElementById('customKm').value, sis: document.getElementById('sisCheck').checked },
@@ -552,7 +618,7 @@
       function applyState(st){
         participants.slice().forEach(p=> removeParticipant(p.id));
         document.getElementById('projName').value = st.name || 'Projet';
-        document.getElementById('limitSel').value = st.settings?.diameterSel || '20';
+        document.getElementById('limitSel').value = st.settings?.diameterSel || '10';
         document.getElementById('customKm').value = st.settings?.customKm || '';
         document.getElementById('sisCheck').checked = !!(st.settings?.sis);
         const custom=document.getElementById('customKm'); const sel=document.getElementById('limitSel');
@@ -570,7 +636,7 @@
       document.getElementById('exportJson').onclick = ()=>{ const st=captureState(); const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(st.name||'projet_acc')+'.json'; a.click(); URL.revokeObjectURL(url); };
       document.getElementById('importJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé.'); }catch(_){ tSet(statusEl,'Fichier invalide.'); } });
 
-      // Impression fiable
+      // Impression
       function updatePrintHeader(){
         const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
         const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
@@ -659,7 +725,7 @@
                 const j=await r.json();
                 const k=parseAndAdd(j);
                 if(k>0){ success=true; break; }
-              }catch(e){ /* essayer endpoint suivant */ }
+              }catch(e){ /* endpoint suivant */ }
             }
           }
           if(success){ tSet(statusEl, 'POI Isère chargés.'); }
@@ -671,7 +737,7 @@
       document.getElementById('loadPoiIsere').addEventListener('click', loadPoiIsere);
       document.getElementById('togglePoi').addEventListener('change', (e)=>{ if(e.target.checked){ poiLayer.addTo(map); } else { map.removeLayer(poiLayer); } });
 
-      // DatARA WMS/WFS
+      // DatARA WMS/WFS (avec filtre + messages CORS)
       const ext = { wmsLayers: [], wfsLayers: [], visible: true };
       const extLayerGroup = L.layerGroup().addTo(map);
       function setExtStatus() { document.getElementById('extLayersCount').textContent = String(ext.wmsLayers.length + ext.wfsLayers.length); }
@@ -689,14 +755,20 @@
         }).filter(o => o.name);
         return layers;
       }
+      function filterSelect(sel, filter){
+        filter = (filter||'').toLowerCase().trim();
+        for(const opt of sel.options){
+          const show = !filter || opt.textContent.toLowerCase().includes(filter) || opt.value.toLowerCase().includes(filter);
+          opt.style.display = show ? '' : 'none';
+        }
+      }
       document.getElementById('wmsListBtn').onclick = async () => {
         const base = (document.getElementById('wmsUrl').value || '').trim();
         const sel = document.getElementById('wmsLayerSel');
-        sel.innerHTML = '<option>Chargement…</option>';
+        sel.innerHTML = '';
         try {
           const list = await fetchWmsLayers(base);
           if (!list.length) { sel.innerHTML = '<option>Aucune couche</option>'; return; }
-          sel.innerHTML = '';
           list.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.name; opt.textContent = `${o.title}  [${o.name}]`;
@@ -705,10 +777,13 @@
           setStatus('Couches WMS listées.');
           localStorage.setItem('wms:lastUrl', base);
         } catch (e) {
-          sel.innerHTML = '<option>Erreur de lecture</option>';
-          setStatus('Erreur WMS : ' + e.message);
+          const opt = document.createElement('option');
+          opt.textContent = 'Erreur / CORS (essaye en local)';
+          sel.appendChild(opt);
+          setStatus('Erreur WMS (probable CORS sur GitHub Pages) : ' + e.message);
         }
       };
+      document.getElementById('wmsFilter').addEventListener('input', (e)=> filterSelect(document.getElementById('wmsLayerSel'), e.target.value));
       document.getElementById('wmsAddBtn').onclick = () => {
         const base = (document.getElementById('wmsUrl').value || '').trim();
         const name = document.getElementById('wmsLayerSel').value;
@@ -742,11 +817,10 @@
       document.getElementById('wfsListBtn').onclick = async () => {
         const base = (document.getElementById('wfsUrl').value || '').trim();
         const sel = document.getElementById('wfsTypeSel');
-        sel.innerHTML = '<option>Chargement…</option>';
+        sel.innerHTML = '';
         try {
           const list = await fetchWfsTypes(base);
           if (!list.length) { sel.innerHTML = '<option>Aucun type</option>'; return; }
-          sel.innerHTML = '';
           list.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.name; opt.textContent = `${o.title}  [${o.name}]`;
@@ -755,10 +829,13 @@
           setStatus('Types WFS listés.');
           localStorage.setItem('wfs:lastUrl', base);
         } catch (e) {
-          sel.innerHTML = '<option>Erreur de lecture</option>';
-          setStatus('Erreur WFS : ' + e.message);
+          const opt = document.createElement('option');
+          opt.textContent = 'Erreur / CORS (essaye en local)';
+          sel.appendChild(opt);
+          setStatus('Erreur WFS (probable CORS sur GitHub Pages) : ' + e.message);
         }
       };
+      document.getElementById('wfsFilter').addEventListener('input', (e)=> filterSelect(document.getElementById('wfsTypeSel'), e.target.value));
       document.getElementById('wfsLoadBtn').onclick = async () => {
         const base = (document.getElementById('wfsUrl').value || '').trim();
         const typeName = document.getElementById('wfsTypeSel').value;
@@ -821,98 +898,65 @@
         tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`);
       };
 
-      // Chronologie ACC
-      const TL_LS_KEY = 'acc_timeline_v1';
-      const defaultTimeline = [
-        {title:'Cadrage & objectifs', tip:'Objectifs éco/sociaux/territoriaux', due:'', done:false},
-        {title:'Recrutement consommateurs', tip:'Démarrer ~6 mois avant lancement', due:'', done:false},
-        {title:'Étude faisabilité centrale', tip:'PV/hydro/éolien, conformité', due:'', done:false},
-        {title:'Étude ACC (énergie/éco/financier)', tip:'Scénarios, TURPE, clés de répartition', due:'', done:false},
-        {title:'Création/identification PMO', tip:'Association/SAS… obligations PMO', due:'', done:false},
-        {title:'Adhésions des participants à la PMO', tip:'Statuts, bulletins', due:'', done:false},
-        {title:'Déclaration + Convention ACC (Enedis)', tip:'Signature ≥1 mois après raccordement', due:'', done:false},
-        {title:'Contrats producteurs↔consommateurs', tip:'Gré à gré (particuliers ≤1 an)', due:'', done:false},
-        {title:'Démarrage opération', tip:'1er du mois suivant la signature', due:'', done:false},
-        {title:'Exploitation & reporting', tip:'Données mensuelles GRD / PMO', due:'', done:false}
-      ];
-      function loadTL(){ try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)) || defaultTimeline.slice(); }catch(_){ return defaultTimeline.slice(); } }
-      function saveTL(items){ try{ localStorage.setItem(TL_LS_KEY, JSON.stringify(items)); }catch(_){ } }
-      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&gt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-      function renderTL(){
-        const root = document.getElementById('accTimeline');
-        const items = loadTL();
-        const today = new Date().toISOString().slice(0,10);
-        const tbl = document.createElement('table'); tbl.className='tl-table';
-        tbl.innerHTML = `
-          <thead><tr>
-            <th style="width:28px">✓</th>
-            <th>Étape</th>
-            <th>Note</th>
-            <th style="width:150px">Échéance</th>
-            <th style="width:110px">Actions</th>
-          </tr></thead>
-          <tbody></tbody>`;
-        const tb = tbl.querySelector('tbody');
-        items.forEach((it, idx)=>{
-          const overdue = it.due && !it.done && it.due < today;
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><input type="checkbox" ${it.done?'checked':''} data-idx="${idx}"></td>
-            <td>${escapeHtml(it.title)}</td>
-            <td>${escapeHtml(it.tip||'')}</td>
-            <td>
-              <input type="date" value="${it.due||''}" data-idx="${idx}" class="tl-date" style="width:140px">
-              ${overdue?'<div class="tl-overdue">En retard</div>': (it.done?'<div class="tl-done">Terminé</div>':'')}
-            </td>
-            <td>
-              <button class="btn secondary tl-up" data-idx="${idx}" title="Monter">↑</button>
-              <button class="btn secondary tl-down" data-idx="${idx}" title="Descendre">↓</button>
-              <button class="btn secondary tl-del" data-idx="${idx}" title="Supprimer">✕</button>
-            </td>`;
-          tb.appendChild(tr);
-        });
-        root.innerHTML = ''; root.appendChild(tbl);
-
-        root.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
-          cb.addEventListener('change', e=>{
-            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].done = e.target.checked; saveTL(arr); renderTL();
-          });
-        });
-        root.querySelectorAll('.tl-date').forEach(inp=>{
-          inp.addEventListener('change', e=>{
-            const i = +e.target.dataset.idx; const arr = loadTL(); arr[i].due = e.target.value; saveTL(arr); renderTL();
-          });
-        });
-        root.querySelectorAll('.tl-up').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i>0){ [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; saveTL(arr); renderTL(); }});
-        root.querySelectorAll('.tl-down').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); if(i<arr.length-1){ [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; saveTL(arr); renderTL(); }});
-        root.querySelectorAll('.tl-del').forEach(b=> b.onclick = () => { const i=+b.dataset.idx; const arr=loadTL(); arr.splice(i,1); saveTL(arr); renderTL(); });
+      // ---- Candidats consommateurs (OSM) ----
+      function pointInPolygon(pt, poly){
+        const x=pt.lng, y=pt.lat; let inside=false;
+        for(let i=0,j=poly.length-1; i<poly.length; j=i++){
+          const xi=poly[i].lng, yi=poly[i].lat, xj=poly[j].lng, yj=poly[j].lat;
+          const intersect = ((yi>y)!=(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-12)+xi);
+          if(intersect) inside=!inside;
+        }
+        return inside;
       }
-      document.getElementById('tlAddStep').onclick = ()=>{
-        const title = prompt('Intitulé de la nouvelle étape :'); if(!title) return;
-        const tip = prompt('Note (optionnel) :') || '';
-        const due = prompt('Échéance (YYYY-MM-DD, optionnel) :') || '';
-        const arr = loadTL(); arr.push({title, tip, due, done:false}); saveTL(arr); renderTL();
-      };
-      document.getElementById('tlClear').onclick = ()=>{
-        if(confirm('Réinitialiser la chronologie aux valeurs par défaut ?')){ saveTL(defaultTimeline.slice()); renderTL(); }
-      };
-      document.getElementById('tlExportCsv').onclick = ()=>{
-        const arr = loadTL();
-        const csv = [
-          'title;note;due;done',
-          ...arr.map(it=>[
-            `"${String(it.title).replace(/"/g,'""')}"`,
-            `"${String(it.tip||'').replace(/"/g,'""')}"`,
-            it.due||'',
-            it.done?'1':'0'
-          ].join(';'))
-        ].join('\n');
-        const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'chronologie_acc.csv'; a.click();
-        URL.revokeObjectURL(url);
-      };
-      renderTL();
+      function overpassQueryForCategories(cats, bbox){
+        const parts=[];
+        if(cats.includes('school')) parts.push('node["amenity"~"school|college|university"]');
+        if(cats.includes('health')) parts.push('node["amenity"~"hospital|clinic|doctors|nursing_home|pharmacy"]');
+        if(cats.includes('admin')) parts.push('node["amenity"~"townhall|public_building|community_centre|library|courthouse"]');
+        if(cats.includes('sport')) parts.push('node["leisure"~"sports_centre|stadium|pitch"]');
+        if(cats.includes('retail')) parts.push('node["shop"]');
+        if(parts.length===0) return null;
+        return `[out:json][timeout:60];
+( ${parts.map(p=>`${p}(${bbox});`).join("\\n")} );
+out body;`;
+      }
+      document.getElementById('loadCandidates').addEventListener('click', async ()=>{
+        candidateLayer.clearLayers(); candCountEl.textContent='0';
+        if(!zoneAccPoly){ tSet(statusEl,'Aucune zone ACC : ajoute au moins un participant.'); return; }
+        const cats = [...document.querySelectorAll('.cand:checked')].map(x=>x.value);
+        const b = zoneAccPoly.getBounds();
+        const bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].join(',');
+        const q = overpassQueryForCategories(cats, bbox);
+        if(!q){ tSet(statusEl,'Choisis au moins une catégorie.'); return; }
+        tSet(statusEl,'Chargement candidats (Overpass)…');
+        const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
+        let data=null;
+        for(const ep of endpoints){
+          try{
+            const r=await fetch(ep+'?data='+encodeURIComponent(q),{headers:{'Accept':'application/json'}});
+            if(!r.ok) throw new Error('HTTP '+r.status);
+            data=await r.json(); break;
+          }catch(e){}
+        }
+        if(!data){ tSet(statusEl,'Overpass indisponible. Réessaie plus tard.'); return; }
+        const poly = zoneAccPoly.getLatLngs()[0].map(ll=>({lat:ll.lat, lng:ll.lng}));
+        let cnt=0;
+        (data.elements||[]).forEach(el=>{
+          const lat = el.lat, lng = el.lon;
+          if(lat==null||lng==null) return;
+          if(!pointInPolygon({lat:lat,lng:lng}, poly)) return;
+          const name = el.tags?.name || el.tags?.operator || el.tags?.brand || 'Candidat';
+          const m = L.circleMarker([lat,lng], {radius:6, color:'#0ea5e9', weight:2, fillColor:'#38bdf8', fillOpacity:.4}).addTo(candidateLayer);
+          m.bindTooltip(name);
+          const addBtn = document.createElement('button'); addBtn.className='btn'; addBtn.textContent='Ajouter comme consommateur';
+          addBtn.onclick = ()=> addParticipant(lat, lng, 'consumer', name);
+          const div = document.createElement('div'); const strong=document.createElement('strong'); strong.textContent=name; div.appendChild(strong); div.appendChild(document.createElement('br')); div.appendChild(addBtn);
+          m.bindPopup(div);
+          cnt++;
+        });
+        candCountEl.textContent=String(cnt);
+        tSet(statusEl, `Candidats chargés : ${cnt} dans la zone.`);
+      });
 
       // Lancer
       try{ initDefaultProducer(); }catch(_){ }
@@ -920,6 +964,10 @@
       tSet(statusEl,'Prêt.');
       window.addEventListener('error', e=>{ tSet(statusEl,'Erreur JS : '+e.message); });
       window.addEventListener('unhandledrejection', e=>{ tSet(statusEl,'Erreur Promesse : '+(e.reason?.message||e.reason)); });
+
+      // Rafraîchir la zone quand D change
+      document.getElementById('limitSel').addEventListener('change', ()=>refreshACC());
+      document.getElementById('customKm').addEventListener('input', ()=>refreshACC());
     }
   </script>
 </body>
