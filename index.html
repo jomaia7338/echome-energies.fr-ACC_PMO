@@ -9,10 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
 
-  <!-- Outils parsing CSV/XLSX (si besoin plus tard) -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
-  <!-- PWA (mettez ces fichiers à la racine) -->
+  <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -20,19 +17,16 @@
 
   <style>
     :root{
-      --ink:#1c1c1c; --line:#e6eaea; --muted:#f7f8f8; --ok:#0f766e; --bad:#b91c1c; --brand:#37C3AF;
-      --hit:44px; /* cible tactile */
+      --ink:#1c1c1c; --line:#e6eaea; --ok:#0f766e; --bad:#b91c1c; --brand:#37C3AF;
+      --hit:44px;
     }
     html,body{height:100%}
     body{margin:0;font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;color:var(--ink);background:#fff;padding-bottom:env(safe-area-inset-bottom)}
 
-    /* Header */
     header.slim{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:6px 8px}
     .brand{display:flex;align-items:center;gap:8px}
     .brand svg{height:26px;width:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
-    .brand .name{font-weight:700;letter-spacing:.3px}
     .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between;width:100%}
-    .group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;min-height:var(--hit)}
     .dot{width:10px;height:10px;border-radius:50%}
     .prod{background:#6D28D9}.cons{background:#2e86de}.poi{background:#E10600}
@@ -47,619 +41,89 @@
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
 
     #map{min-height:560px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
-    .legend-overlay{position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:10px;padding:6px 8px;display:flex;gap:10px;align-items:center;font-size:12px}
-    .legend-overlay .item{display:flex;align-items:center;gap:6px}
+    .legend-overlay{position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:10px;padding:6px 8px;display:flex;gap:10px;font-size:12px}
 
-    /* Échelle 1:n */
-    .leaflet-control.ratio-control{
-      background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:10px;
-      padding:6px 10px;font-size:12px;z-index:1000
-    }
-
-    /* Drawer → bottom-sheet en mobile */
     #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:420px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.08);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
     #drawer.open{transform:none}
     #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px;border-bottom:1px solid var(--line);cursor:grab}
-    #drawer h2{font-size:16px;margin:0}
     #drawer .content{padding:12px;overflow:auto;max-height:calc(100vh - 52px)}
     fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0;padding:10px}
     legend{padding:0 6px;color:#475569;font-size:12px}
     textarea{width:100%;min-height:80px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:10px}
     .small{font-size:12px;color:#64748b}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
-    /* Mobile */
     @media (max-width: 768px){
-      header.slim{ padding:6px 8px; }
-      #map{ height: calc(100dvh - 64px); } /* plein écran mobile */
-      #drawer{
-        inset:auto 0 env(safe-area-inset-bottom) 0;
-        top:auto; width:100%; height:60dvh;
-        transform:translateY(100%);
-        border-left:none;border-top:1px solid var(--line);
-        border-radius:12px 12px 0 0; box-shadow:0 -8px 24px rgba(0,0,0,.12);
-      }
-      #drawer.open{ transform:none; }
-      #drawer .content{ max-height:calc(60dvh - 52px); }
-    }
-
-    /* PRINT */
-    .print-header{display:none}
-    .print-legend{display:none}
-    @media print{
-      @page { size: A4 landscape; margin: 12mm; }
-      header.slim, #drawer, #status{ display:none !important; }
-      body{ background:#fff; }
-      .print-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-      .print-header .left{display:flex;align-items:center;gap:8px}
-      .print-header .title{font-weight:700}
-      #map{ height:170mm !important; min-height:170mm !important; margin:0; border:0 }
-      .leaflet-pane, .leaflet-map-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow{ transform:none !important; animation:none !important; }
-      .leaflet-container{ background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      .legend-overlay{ display:none; }
-      .print-legend{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;margin-top:8px;font-size:12px}
+      #map{ height: calc(100dvh - 64px); }
+      #drawer{inset:auto 0 env(safe-area-inset-bottom) 0;top:auto;width:100%;height:60dvh;transform:translateY(100%);border-left:none;border-top:1px solid var(--line);border-radius:12px 12px 0 0}
+      #drawer.open{transform:none}
+      #drawer .content{max-height:calc(60dvh - 52px)}
     }
   </style>
 </head>
 <body>
-  <!-- BARRE -->
   <header class="slim">
-    <div class="brand" role="img" aria-label="Echome Énergies">
-      <svg viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
-        <text x="60" y="19" text-anchor="middle" font-size="14" fill="#ffffff">ECHOME</text>
-      </svg>
-      <span class="name">Echome Énergies</span>
+    <div class="brand">
+      <svg viewBox="0 0 120 32"><rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/><text x="60" y="19" text-anchor="middle" font-size="14" fill="#fff">ECHOME</text></svg>
+      <span>Echome Énergies</span>
     </div>
-
     <div class="controls">
-      <!-- Type de point -->
-      <div class="group" role="radiogroup" aria-label="Type de point (ACC)">
-        <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
-        <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
+      <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
+      <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
+      <div>
+        <select id="limitSel"><option value="2">2 km</option><option value="10" selected>10 km</option><option value="20">20 km</option></select>
+        <input id="customKm" type="number" style="display:none;width:80px" placeholder="km">
       </div>
-
-      <!-- Diamètre (rappel SIS) -->
-      <div class="group" aria-label="Diamètre">
-        <label class="small">Diamètre :</label>
-        <select id="limitSel" aria-label="Diamètre autorisé">
-          <option value="2">2 km</option>
-          <option value="10" selected>10 km</option>
-          <option value="20">20 km</option>
-          <option value="custom">Perso</option>
-        </select>
-        <input id="customKm" type="number" min="0" step="0.1" placeholder="km" style="width:90px;display:none" aria-label="Diamètre personnalisé">
-        <label class="small" title="Si un SIS participe, le diamètre autorisé passe à 20 km">
-          <input type="checkbox" id="sisCheck"> SIS participant → 20 km
-        </label>
-      </div>
-
-      <!-- Actions -->
-      <div class="group">
-        <button id="openProjBtn" class="btn icon" title="Ouvrir un fichier projet…" aria-label="Ouvrir un fichier projet">📂</button>
-        <button id="locateBtn" class="btn icon" title="Me localiser" aria-label="Me localiser">📍</button>
-        <button id="fitBtn" class="btn icon" title="Ajuster la vue" aria-label="Ajuster la vue">🗺️</button>
-        <button id="printBtn" class="btn icon" title="Exporter en PDF" aria-label="Exporter en PDF">🖨️</button>
-        <button id="clearBtn" class="btn icon" title="Effacer les participants" aria-label="Effacer les participants">🗑️</button>
-        <button id="gearBtn" class="btn secondary" title="Options">⚙️</button>
-      </div>
+      <button id="gearBtn" class="btn secondary">⚙️</button>
     </div>
   </header>
 
-  <!-- Impression -->
-  <div class="print-header" id="printHeader">
-    <div class="left brand">
-      <svg viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
-        <text x="60" y="19" text-anchor="middle" font-size="14" fill="#ffffff">ECHOME</text>
-      </svg>
-      <span class="title">ACC – Centre libre (diamètre)</span>
-    </div>
-    <div class="right small" id="printMeta"></div>
-  </div>
-
-  <div id="status" role="status" aria-live="polite">Initialisation…</div>
-  <div id="map" aria-label="Carte interactive">
-    <div class="legend-overlay" aria-hidden="true">
-      <div class="item"><span class="dot prod"></span>Producteur</div>
-      <div class="item"><span class="dot cons"></span>Consommateur</div>
-      <div class="item"><span class="dot poi"></span>POI incendie (SIS)</div>
+  <div id="status">Initialisation…</div>
+  <div id="map">
+    <div class="legend-overlay">
+      <div><span class="dot prod"></span> Prod.</div>
+      <div><span class="dot cons"></span> Cons.</div>
+      <div><span class="dot poi"></span> POI</div>
     </div>
   </div>
 
-  <!-- Drawer / Bottom-sheet -->
-  <aside id="drawer" aria-hidden="true" aria-label="Options">
-    <header>
-      <h2>Options</h2>
-      <button id="drawerClose" class="btn secondary">Fermer</button>
-    </header>
+  <aside id="drawer">
+    <header><h2>Options</h2><button id="drawerClose" class="btn secondary">Fermer</button></header>
     <div class="content">
       <fieldset>
         <legend>Projet</legend>
-        <div class="row">
-          <label class="small">Nom du projet :</label>
-          <input id="projName" type="text" placeholder="Projet 1" style="flex:1">
-        </div>
-        <div class="row" style="margin-top:6px">
-          <button id="saveLocal" class="btn">Enregistrer (local)</button>
-          <select id="projList" style="flex:1" aria-label="Projets sauvegardés"></select>
-          <button id="loadLocal" class="btn secondary">Charger</button>
-          <button id="delLocal" class="btn secondary">Supprimer</button>
-        </div>
-        <div class="row" style="margin-top:6px">
-          <button id="exportJson" class="btn">Exporter projet</button>
-          <input id="importJson" type="file" accept="application/json">
-        </div>
-        <div class="small" style="margin-top:6px">Participants : <span id="count">Aucun point.</span></div>
+        <input id="projName" placeholder="Nom du projet">
+        <button id="saveLocal" class="btn">Enregistrer</button>
+        <button id="exportJson" class="btn">Exporter</button>
+        <input id="importJson" type="file" accept="application/json">
       </fieldset>
-
       <fieldset>
-        <legend>Import rapide (participants)</legend>
-        <div class="small">Format : <code>Nom;Lat;Lon;Type</code> — Types : <em>consumer</em> / <em>producer</em></div>
-        <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer"></textarea>
-        <div class="row" style="margin-top:8px">
-          <button id="importBtn" class="btn">Importer</button>
-          <button id="exportCsvParticipants" class="btn secondary">Export CSV (participants)</button>
-        </div>
+        <legend>Import rapide</legend>
+        <textarea id="bulk"></textarea>
+        <button id="importBtn" class="btn">Importer</button>
       </fieldset>
-
       <fieldset>
-        <legend>Candidats consommateurs (OSM)</legend>
-        <div class="small">Charge des POI dans la zone ACC, avec libellés enrichis (type + adresse).</div>
-        <div class="row" style="margin-top:6px">
-          <label class="small"><input type="checkbox" class="cand" value="school" checked> Éducation</label>
-          <label class="small"><input type="checkbox" class="cand" value="health" checked> Santé</label>
-          <label class="small"><input type="checkbox" class="cand" value="admin" checked> Administration</label>
-          <label class="small"><input type="checkbox" class="cand" value="sport"> Sport</label>
-          <label class="small"><input type="checkbox" class="cand" value="retail"> Retail</label>
-        </div>
-        <div class="row" style="margin-top:6px">
-          <input id="candFilter" type="text" placeholder="Filtrer (nom/type/adresse)..." style="flex:1">
-          <button id="loadCandidates" class="btn">Charger</button>
-        </div>
-        <div class="row" style="margin-top:6px">
-          <button id="addVisibleCandidates" class="btn secondary">Ajouter visibles</button>
-          <button id="exportCsvCandidates" class="btn secondary">Export CSV (candidats)</button>
-          <span class="small">Candidats : <span id="candCount">0</span></span>
-        </div>
+        <legend>Candidats OSM</legend>
+        <button id="loadCandidates" class="btn">Charger candidats</button>
       </fieldset>
-
       <fieldset>
-        <legend>POI “Incendie & Secours”</legend>
-        <div class="small">Charger dans la zone ACC (Isère si hors zone).</div>
-        <div class="row" style="margin-top:6px">
-          <button id="loadPoiZone" class="btn">Charger POI (zone)</button>
-          <label class="small"><input type="checkbox" id="togglePoi" checked> Afficher POI</label>
-          <div class="small">POI : <span id="poiStats">0</span> — Dans D/2 : <span id="poiInRange">0</span></div>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Rechercher une adresse</legend>
-        <div class="row">
-          <input id="searchQ" type="text" placeholder="Adresse, commune, code postal" style="flex:1">
-          <button id="searchBtn" class="btn">Rechercher</button>
-        </div>
-        <div id="searchResults" class="small" aria-live="polite" style="margin-top:6px"></div>
+        <legend>POI Incendie</legend>
+        <button id="loadPoiZone" class="btn">Charger POI</button>
       </fieldset>
     </div>
   </aside>
 
   <script>
-  // ===== Helpers
-  const statusEl = document.getElementById('status');
-  const mapEl = document.getElementById('map');
-  const eps = 1e-9, toRad = d => d*Math.PI/180;
-  const tSet=(el,txt,cls='')=>{el.className=cls;el.textContent=txt;};
-  const hSet=(el,html,cls='')=>{el.className=cls;el.innerHTML=html;};
-  const safe=(s)=>String(s??'');
-  function fmtDate(d){ const p=n=>String(n).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
-  function haversineKm(a,b){ const R=6371; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng); const lat1=toRad(a.lat), lat2=toRad(b.lat); const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+  const statusEl=document.getElementById('status');
+  const map=L.map('map',{zoomControl:true,scrollWheelZoom:false}).setView([45.3,5.6],8);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
 
-  // ===== Carte (touch-friendly)
-  const map = L.map('map', { zoomControl:true, scrollWheelZoom:false, tapTolerance:20 }).setView([45.3,5.6],8);
-  L.control.zoom({ position:'bottomright' }).addTo(map);
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© Carto, © OpenStreetMap'});
-  osm.on('tileerror', ()=>{ if(!map.hasLayer(carto)) carto.addTo(map); if(map.hasLayer(osm)) map.removeLayer(osm); tSet(statusEl,'Fond OSM bloqué → Carto Light.'); });
-  L.control.scale({imperial:false, metric:true, maxWidth:120}).addTo(map);
+  const participants=[]; const colors={producer:'#6D28D9',consumer:'#2e86de'};
+  function addParticipant(lat,lng,type,name){const m=L.circleMarker([lat,lng],{radius:7,color:colors[type]}).addTo(map);participants.push({lat,lng,type,name:name||type,marker:m});refreshACC();}
+  function refreshACC(){statusEl.innerHTML="Zone ACC actualisée"; if(participants.length){const center=participants[0];annotateLocationAtCenter(center);} }
 
-  // Échelle 1:n
-  const RatioControl = L.Control.extend({
-    options:{position:'topright'},
-    onAdd: function(map){ const d=L.DomUtil.create('div','leaflet-control ratio-control'); this._div=d; this._map=map; this._update=this._update.bind(this); map.on('zoomend moveend',this._update); this._update(); return d; },
-    onRemove:function(map){ map.off('zoomend moveend',this._update); },
-    _update:function(){ const c=this._map.getCenter(), z=this._map.getZoom(); const mpp=156543.03392*Math.cos(c.lat*Math.PI/180)/Math.pow(2,z); const denom=Math.max(1,Math.round(mpp/0.0002645833333)); this._div.textContent='Échelle ~ 1:'+denom.toLocaleString('fr-FR'); }
-  });
-  map.whenReady(()=> map.addControl(new RatioControl()));
-
-  // Layout
-  function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(560, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height=h+'px'; try{ map.invalidateSize(); }catch(_){ } }
-  window.addEventListener('resize', layout); setTimeout(layout,50);
-
-  // Couches
-  const participantLayer=L.layerGroup().addTo(map);
-  const candidateLayer=L.layerGroup().addTo(map);
-  const poiLayer=L.layerGroup().addTo(map);
-  const zoneLayer=L.layerGroup().addTo(map);
-
-  const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
-  const participants=[]; const pois=[]; let uid=0;
-  let vizCircle=null; let zoneAccPoly=null;
-
-  // Drawer / Bottom-sheet
-  const drawer=document.getElementById('drawer');
-  document.getElementById('gearBtn').onclick=()=>{ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); };
-  document.getElementById('drawerClose').onclick=()=>{ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); };
-  let startY=null;
-  drawer.addEventListener('touchstart', e=>{ startY=e.touches[0].clientY; }, {passive:true});
-  drawer.addEventListener('touchmove', e=>{ if(startY==null)return; const dy=e.touches[0].clientY-startY; if(dy>60){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); startY=null; } }, {passive:true});
-
-  // Accès UI
-  function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
-  function currentDiameter(){ const sis=document.getElementById('sisCheck').checked; if(sis) return 20; const sel=document.getElementById('limitSel').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
-  function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent=n?`${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.`:'Aucun point.'; }
-
-  // MEC utils (en degrés→projection locale km)
-  function projectLocal(pointsLL){ const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length; const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length; const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32})); return {lat0,lon0,P}; }
-  function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0+y/111.32, lng:lon0+x/(111.32*Math.cos(lat0*Math.PI/180))}; }
-  function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
-  function circleBy2(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:Math.sqrt(dist2(a,b))/2}; }
-  function circleBy3(a,b,c){ const A=b.x-a.x,B=b.y-a.y,C=c.x-a.x,D=c.y-a.y,E=A*(a.x+b.x)+B*(a.y+b.y),F=C*(a.x+c.x)+D*(a.y+c.y),G=2*(A*(c.y-b.y)-B*(c.x-b.x)); if(Math.abs(G)<1e-12) return null; const x=(D*E-B*F)/G,y=(A*F-C*E)/G,r=Math.hypot(x-a.x,y-a.y); return {x,y,r}; }
-  function inCircle(c,p){ return Math.hypot(c.x-p.x,c.y-p.y) <= c.r + 1e-9; }
-  function minimalEnclosingCircle(pointsLL){ if(pointsLL.length===0) return null; if(pointsLL.length===1) return {center:pointsLL[0], r:0}; const {lat0,lon0,P}=projectLocal(pointsLL); let best=null;
-    for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const c=circleBy2(P[i],P[j]); if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; }
-    for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++) for(let k=j+1;k<P.length;k++){ const c=circleBy3(P[i],P[j],P[k]); if(!c) continue; if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; }
-    if(!best){ let max=-1,a=-1,b=-1; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const d=dist2(P[i],P[j]); if(d>max){max=d;a=i;b=j;} } best=circleBy2(P[a],P[b]); }
-    const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r};
-  }
-
-  // Polygone intersection de disques (clip)
-  function circlePolygonXY(cx, cy, Rm, N=128){ const pts=[]; for(let i=0;i<N;i++){ const t=2*Math.PI*i/N; pts.push({x: cx + Rm*Math.cos(t), y: cy + Rm*Math.sin(t)}); } return pts; }
-  function clipPoly(subject, clip){
-    function inside(p, a, b){ return (b.x - a.x)*(p.y - a.y) - (b.y - a.y)*(p.x - a.x) >= 0; }
-    function intersect(a, b, p, q){ const A={x:b.x-a.x,y:b.y-a.y}, B={x:q.x-p.x,y:q.y-p.y}; const den=A.x*B.y - A.y*B.x; if(Math.abs(den)<1e-12) return b; const s=((p.x-a.x)*B.y - (p.y-a.y)*B.x)/den; return {x:a.x+s*A.x,y:a.y+s*A.y}; }
-    let output=subject.slice();
-    for(let i=0;i<clip.length;i++){
-      const a=clip[i], b=clip[(i+1)%clip.length]; const input=output.slice(); output=[];
-      for(let j=0;j<input.length;j++){
-        const P=input[j], Q=input[(j+1)%input.length]; const Pin=inside(P,a,b), Qin=inside(Q,a,b);
-        if(Pin && Qin){ output.push(Q); } else if(Pin && !Qin){ output.push(intersect(P,Q,a,b)); } else if(!Pin && Qin){ output.push(intersect(P,Q,a,b)); output.push(Q); }
-      }
-      if(!output.length) break;
-    }
-    return output;
-  }
-  function polygonLLfromDisks(points, Dkm){
-    if(!points.length) return null;
-    const Rm=(Dkm/2)*1000;
-    const lat0=points.reduce((s,p)=>s+p.lat,0)/points.length, lon0=points.reduce((s,p)=>s+p.lng,0)/points.length;
-    const cos=Math.cos(lat0*Math.PI/180);
-    const toXY=(lat,lng)=>({x:(lng-lon0)*111320*cos,y:(lat-lat0)*111320});
-    const toLL=(x,y)=>({lat:lat0+y/111320,lng:lon0+x/(111320*cos)});
-    let subject=[{x:-50000,y:-50000},{x:50000,y:-50000},{x:50000,y:50000},{x:-50000,y:50000}];
-    for(const p of points){ const xy=toXY(p.lat,p.lng); const circ=circlePolygonXY(xy.x,xy.y,Rm,128); subject=clipPoly(subject,circ); if(!subject.length) return null; }
-    return subject.map(pt=>toLL(pt.x,pt.y));
-  }
-
-  // Participants
-  function makeParticipantPopup(entry){
-    const wrap=document.createElement('div');
-    const title=document.createElement('strong'); title.textContent=entry.name||''; wrap.appendChild(title);
-    wrap.appendChild(document.createElement('br'));
-    wrap.appendChild(document.createTextNode(entry.type));
-    const box=document.createElement('div'); box.style.marginTop='6px'; box.style.display='flex'; box.style.gap='6px'; box.style.flexWrap='wrap';
-    const bRen=document.createElement('button'); bRen.className='btn secondary'; bRen.textContent='Renommer';
-    bRen.onclick=()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); entry.marker.setPopupContent(makeParticipantPopup(entry)); entry.marker.bindTooltip(`${entry.name} (${entry.type})`); } };
-    const bDel=document.createElement('button'); bDel.className='btn secondary'; bDel.textContent='Supprimer';
-    bDel.onclick=()=> removeParticipant(entry.id);
-    box.appendChild(bRen); box.appendChild(bDel); wrap.appendChild(box);
-    return wrap;
-  }
-  function addParticipant(lat,lng,type,name){
-    const id=++uid; const label=name || `${type} ${id}`;
-    const m=L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3}).addTo(participantLayer);
-    const entry={id,name:label,type,lat,lng,marker:m};
-    m.bindTooltip(`${safe(label)} (${type})`);
-    m.bindPopup(makeParticipantPopup(entry));
-    m.on('contextmenu', ()=> removeParticipant(id));
-    participants.push(entry);
-    refreshACC(true);
-  }
-  function removeParticipant(id){ const i=participants.findIndex(p=>p.id===id); if(i>-1){ participantLayer.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); } }
-  map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
-
-  // Zone ACC
-  function clearZone(){ zoneLayer.clearLayers(); vizCircle=null; zoneAccPoly=null; }
-  function styleParticipants(center, R){ if(!center){ participants.forEach(p=> p.marker.setStyle({color:colors[p.type], weight:2, fillColor:colors[p.type], fillOpacity:.3})); return; }
-    participants.forEach(p=>{ const d=haversineKm(center,{lat:p.lat,lng:p.lng}); const inside=d<=R+eps;
-      p.marker.setStyle({ color: inside?colors[p.type]:'#8b8b8b', weight: inside?3:2, fillColor:colors[p.type], fillOpacity: inside?.5:.15 });
-    });
-  }
-  function updateZone(D){
-    clearZone(); if(!participants.length) return;
-    const mec=minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng}))); const R=D/2;
-    if(mec){ vizCircle=L.circle([mec.center.lat,mec.center.lng],{radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:.9,dashArray:'6 6'}).addTo(zoneLayer).bindTooltip('Centre libre (visualisation)'); }
-    const polyLL=polygonLLfromDisks(participants.map(p=>({lat:p.lat,lng:p.lng})), D);
-    if(polyLL && polyLL.length>=3){ zoneAccPoly=L.polygon(polyLL,{color:'#2563eb',weight:2,fillColor:'#3b82f6',fillOpacity:.12}).addTo(zoneLayer); }
-  }
-
-  function refreshACC(autoFit=false){
-    updateCount();
-    const D=currentDiameter(), R=D/2;
-    clearZone();
-    if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); document.getElementById('poiInRange').textContent='0'; styleParticipants(null,0); return; }
-    if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); document.getElementById('poiInRange').textContent='0'; styleParticipants(null,0); return; }
-
-    const mec=minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng})));
-    const pass=mec ? (mec.r<=R+eps) : false;
-    if(mec){
-      const outside=participants.filter(p=>haversineKm(mec.center,{lat:p.lat,lng:p.lng})>R+eps).map(p=>p.name||p.type);
-      if(pass){ hSet(statusEl, `<strong>Conforme</strong> — D=${D} km · r*=${mec.r.toFixed(2)} km ≤ D/2=${R.toFixed(2)} km.`, 'ok'); }
-      else{ hSet(statusEl, `<strong>Non conforme</strong> — D=${D} km · r*=${mec.r.toFixed(2)} km > D/2=${R.toFixed(2)} km · Points limitants : ${outside.join(', ')||'—'}`, 'ko'); }
-      styleParticipants(mec.center, R);
-    }
-    updateZone(D);
-
-    if(autoFit && participants.length>1){
-      const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25));
-    }
-    updatePoiInRange(mec?mec.center:null, R);
-  }
-
-  // UI: diamètre & SIS
-  document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; document.getElementById('customKm').style.display=(v==='custom')?'inline-block':'none'; refreshACC(); });
-  document.getElementById('customKm').addEventListener('input', refreshACC);
-  document.getElementById('sisCheck').addEventListener('change', ()=>{ const c=document.getElementById('customKm'), s=document.getElementById('limitSel'); if(document.getElementById('sisCheck').checked){ s.disabled=true; c.disabled=true; }else{ s.disabled=false; c.disabled=false; } refreshACC(); });
-
-  // Actions
-  document.getElementById('clearBtn').onclick=()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
-  document.getElementById('fitBtn').onclick=()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
-
-  // Localisation
-  let myMarker=null,myAccCircle=null;
-  function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-  document.getElementById('locateBtn').addEventListener('click', ()=>{
-    if(!navigator.geolocation){ tSet(statusEl,'Géolocalisation non supportée.'); return; }
-    navigator.geolocation.getCurrentPosition(pos=>{
-      const lat=pos.coords.latitude,lng=pos.coords.longitude,acc=pos.coords.accuracy||50;
-      clearMyLoc();
-      const myIcon=L.divIcon({className:'myloc-pin', html:`<svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/><circle cx="16" cy="12" r="5" fill="#34D399"/></svg>`, iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-28]});
-      myMarker=L.marker([lat,lng],{icon:myIcon,zIndexOffset:1000}).addTo(map).bindTooltip('Vous êtes ici');
-      myAccCircle=L.circle([lat,lng],{radius:acc,color:'#34D399',weight:1,opacity:0.5,fillOpacity:0.06}).addTo(map);
-      map.setView([lat,lng], 15); tSet(statusEl,`Localisé (~±${Math.round(acc)} m).`);
-    }, ()=> tSet(statusEl,'Géolocalisation refusée / indisponible.'), {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
-  });
-
-  // Fichier projet (ouvrir via bouton ou Cmd/Ctrl+O)
-  document.getElementById('openProjBtn').onclick=()=>{ document.getElementById('importJson').click(); };
-  window.addEventListener('keydown', (e)=>{ const tag=(e.target&&e.target.tagName||'').toUpperCase(); if(tag==='INPUT'||tag==='TEXTAREA'||(e.target&&e.target.isContentEditable)) return; if((e.metaKey||e.ctrlKey)&& (e.key||'').toLowerCase()==='o'){ e.preventDefault(); document.getElementById('importJson').click(); } });
-
-  // Projets (save/load)
-  function captureState(){ return { name:(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1', settings:{ diameterSel: document.getElementById('limitSel').value, customKm: document.getElementById('customKm').value, sis: document.getElementById('sisCheck').checked }, participants: participants.map(p=>({name:p.name,lat:p.lat,lng:p.lng,type:p.type})) }; }
-  function applyState(st){ participants.slice().forEach(p=> removeParticipant(p.id)); document.getElementById('projName').value=st.name||'Projet'; document.getElementById('limitSel').value=st.settings?.diameterSel||'10'; document.getElementById('customKm').value=st.settings?.customKm||''; document.getElementById('sisCheck').checked=!!(st.settings?.sis);
-    const v=document.getElementById('limitSel').value; document.getElementById('customKm').style.display=(v==='custom')?'inline-block':'none'; if(document.getElementById('sisCheck').checked){ document.getElementById('limitSel').disabled=true; document.getElementById('customKm').disabled=true; } else { document.getElementById('limitSel').disabled=false; document.getElementById('customKm').disabled=false; }
-    (st.participants||[]).forEach(p=> addParticipant(p.lat,p.lng,p.type,p.name)); refreshACC(true);
-  }
-  function lsKey(name){ return 'acc_project:'+name; }
-  function refreshProjectList(){ const sel=document.getElementById('projList'); const keys=[]; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.startsWith('acc_project:')) keys.push(k.slice('acc_project:'.length)); } keys.sort((a,b)=>a.localeCompare(b)); sel.innerHTML=''; keys.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); }); }
-  document.getElementById('saveLocal').onclick=()=>{ const st=captureState(); localStorage.setItem(lsKey(st.name), JSON.stringify(st)); refreshProjectList(); tSet(statusEl,'Projet enregistré (local).'); };
-  document.getElementById('loadLocal').onclick=()=>{ const sel=document.getElementById('projList'); const n=sel.value; if(!n) return; try{ const st=JSON.parse(localStorage.getItem(lsKey(n))); if(st) applyState(st); tSet(statusEl,'Projet chargé.'); }catch(_){ tSet(statusEl,'Chargement impossible.'); }};
-  document.getElementById('delLocal').onclick=()=>{ const sel=document.getElementById('projList'); const n=sel.value; if(!n) return; localStorage.removeItem(lsKey(n)); refreshProjectList(); tSet(statusEl,'Projet supprimé.'); };
-
-  // Export JSON (partage mobile)
-  async function shareFile(name, blob){
-    const file=new File([blob], name, {type:blob.type});
-    if(navigator.share && navigator.canShare?.({files:[file]})){ try{ await navigator.share({files:[file], title:name}); return true; }catch(_){} }
-    return false;
-  }
-  document.getElementById('exportJson').onclick=async ()=>{ const st=captureState(); const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'}); if(await shareFile((st.name||'projet_acc')+'.json', blob)) return; const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(st.name||'projet_acc')+'.json'; a.click(); URL.revokeObjectURL(url); };
-  document.getElementById('importJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé.'); }catch(_){ tSet(statusEl,'Fichier invalide.'); } });
-
-  // Impression
-  function updatePrintHeader(){ const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1'; const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length; document.getElementById('printMeta').textContent=`${name} — D=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`; }
-  async function ensureTilesReady(timeout=2000){ return new Promise(resolve=>{ const start=Date.now(); const tiles=[...document.querySelectorAll('.leaflet-tile')]; if(tiles.length===0){ resolve(); return; } let remaining=tiles.length; const done=()=>{ if(--remaining<=0 || (Date.now()-start)>timeout) resolve(); }; tiles.forEach(img=>{ if(img.complete && img.naturalWidth>0){ done(); } else { img.addEventListener('load',done,{once:true}); img.addEventListener('error',done,{once:true}); } }); setTimeout(resolve, timeout); }); }
-  document.getElementById('printBtn').onclick=async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(2000); window.print(); };
-  window.addEventListener('beforeprint', async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(1500); });
-  window.addEventListener('afterprint', ()=>{ setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 100); });
-
-  // Recherche adresse
-  async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry,p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1],lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label || p.name || q, lat, lng}; }).filter(Boolean); }
-  async function geocodeNominatim(q){ const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q='+encodeURIComponent(q); const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json(); return j.map(o=>({label:o.display_name,lat:parseFloat(o.lat),lng:parseFloat(o.lon)})); }
-  async function searchAddress(q){ const box=document.getElementById('searchResults'); box.textContent='Recherche…'; let res=[]; try{ res=await geocodePhoton(q); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){ } } if(!res.length){ box.textContent='Aucun résultat.'; return; } const ul=document.createElement('ul'); res.forEach(r=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=r.label; a.dataset.lat=String(r.lat); a.dataset.lng=String(r.lng); a.dataset.label=r.label; li.appendChild(a); ul.appendChild(li); }); box.innerHTML=''; box.appendChild(ul); }
-  document.getElementById('searchBtn').addEventListener('click', ()=>{ const q=(document.getElementById('searchQ').value||'').trim(); if(q) searchAddress(q); });
-  document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
-  document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); addParticipant(parseFloat(a.dataset.lat), parseFloat(a.dataset.lng), selectedType(), a.dataset.label); map.setView([parseFloat(a.dataset.lat), parseFloat(a.dataset.lng)], 15); });
-
-  // Import participants
-  document.getElementById('importBtn').onclick=()=>{ const txt=(document.getElementById('bulk').value||'').trim(); if(!txt) return; let ok=0,ko=0; txt.split(/\r?\n/).forEach(line=>{ if(!line.trim()) return; const p=line.split(/[;,]|\t/).map(s=>s.trim()); if(p.length<4){ko++;return;} const [name,latS,lonS,typeS]=p; const lat=+latS,lng=+lonS; if(!isFinite(lat)||!isFinite(lng)){ko++;return;} let t=(typeS||'').toLowerCase(); if(t.startsWith('cons')) t='consumer'; else if(t.startsWith('prod')) t='producer'; else {ko++;return;} addParticipant(lat,lng,t,name); ok++; }); tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`); };
-
-  // Export CSV participants
-  document.getElementById('exportCsvParticipants').onclick=()=>{ if(!participants.length) return; const header=['name','type','lat','lon']; const rows=participants.map(p=>[p.name?.replace(/;/g,','),p.type,p.lat,p.lng].join(';')); const csv=[header.join(';'),...rows].join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='participants.csv'; a.click(); URL.revokeObjectURL(url); };
-
-  // ===== Candidats OSM
-  function pointInPolygon(pt, poly){ const x=pt.lng,y=pt.lat; let inside=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i].lng,yi=poly[i].lat,xj=poly[j].lng,yj=poly[j].lat; const intersect=((yi>y)!=(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-12)+xi); if(intersect) inside=!inside; } return inside; }
-  function osmLabelFromTags(tags){
-    const t=tags||{}; const cat = (()=>{
-      if(t.amenity){ const a=t.amenity; if(/school|college|university/.test(a)) return 'Éducation';
-        if(/hospital|clinic|doctors|nursing_home|pharmacy/.test(a)) return 'Santé';
-        if(/townhall|public_building|community_centre|library|courthouse/.test(a)) return 'Administration';
-      }
-      if(t.leisure && /sports_centre|stadium|pitch/.test(t.leisure)) return 'Sport';
-      if(t.shop) return 'Retail';
-      return 'Divers';
-    })();
-    const type = t.amenity || t.shop || t.leisure || t.office || 'poi';
-    const address = [t['addr:housenumber'], t['addr:street'], t['addr:city']].filter(Boolean).join(', ');
-    const name = t.name || t.operator || t.brand || `${type} (OSM)`;
-    return {name, type, address, cat};
-  }
-  function overpassQueryForCategories(cats, bbox){
-    const parts=[];
-    if(cats.includes('school')) parts.push('node["amenity"~"school|college|university"]');
-    if(cats.includes('health')) parts.push('node["amenity"~"hospital|clinic|doctors|nursing_home|pharmacy"]');
-    if(cats.includes('admin')) parts.push('node["amenity"~"townhall|public_building|community_centre|library|courthouse"]');
-    if(cats.includes('sport')) parts.push('node["leisure"~"sports_centre|stadium|pitch"]');
-    if(cats.includes('retail')) parts.push('node["shop"]');
-    if(parts.length===0) return null;
-    return `[out:json][timeout:60];
-( ${parts.map(p=>`${p}(${bbox});`).join("\n")} );
-out tags center;`;
-  }
-  let lastCandidates = []; // pour export
-  document.getElementById('loadCandidates').addEventListener('click', async ()=>{
-    candidateLayer.clearLayers(); document.getElementById('candCount').textContent='0'; lastCandidates=[];
-    if(!zoneAccPoly){ tSet(statusEl,'Aucune zone ACC : ajoute au moins un participant.'); return; }
-    const cats=[...document.querySelectorAll('.cand:checked')].map(x=>x.value);
-    const b=zoneAccPoly.getBounds(); const bbox=[b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].join(',');
-    const q=overpassQueryForCategories(cats,bbox); if(!q){ tSet(statusEl,'Choisis au moins une catégorie.'); return; }
-    tSet(statusEl,'Chargement candidats (Overpass)…');
-    const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
-    let data=null;
-    for(const ep of endpoints){ try{ const r=await fetch(ep+'?data='+encodeURIComponent(q),{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('HTTP '+r.status); data=await r.json(); break; }catch(e){} }
-    if(!data){ tSet(statusEl,'Overpass indisponible.'); return; }
-
-    const poly=zoneAccPoly.getLatLngs()[0].map(ll=>({lat:ll.lat,lng:ll.lng}));
-    let cnt=0;
-    (data.elements||[]).forEach(el=>{
-      const lat=el.lat||el.center?.lat, lng=el.lon||el.center?.lon; if(lat==null||lng==null) return;
-      if(!pointInPolygon({lat,lng}, poly)) return;
-      const {name,type,address,cat}=osmLabelFromTags(el.tags||{});
-      const m=L.circleMarker([lat,lng],{radius:6,color:'#0ea5e9',weight:2,fillColor:'#38bdf8',fillOpacity:.4}).addTo(candidateLayer);
-      const div=document.createElement('div'); const strong=document.createElement('strong'); strong.textContent=name; div.appendChild(strong);
-      if(address){ div.appendChild(document.createElement('br')); const sm=document.createElement('span'); sm.className='small'; sm.textContent=address; div.appendChild(sm); }
-      const addBtn=document.createElement('button'); addBtn.className='btn'; addBtn.textContent='Ajouter comme consommateur'; addBtn.style.marginTop='6px'; addBtn.onclick=()=> addParticipant(lat,lng,'consumer',name);
-      div.appendChild(document.createElement('br')); div.appendChild(addBtn);
-      m.bindTooltip(`${name} — ${cat}`);
-      m.bindPopup(div);
-      lastCandidates.push({name,type,category:cat,address,lat,lng});
-      cnt++;
-    });
-    document.getElementById('candCount').textContent=String(cnt);
-    tSet(statusEl,`Candidats chargés : ${cnt} dans la zone.`);
-    applyCandidateFilter();
-  });
-
-  // Filtre texte candidats
-  function applyCandidateFilter(){
-    const q=(document.getElementById('candFilter').value||'').trim().toLowerCase();
-    candidateLayer.eachLayer(layer=>{
-      const tt=layer.getTooltip(); const label=tt? (tt.getContent()+''):''; const has = !q || label.toLowerCase().includes(q);
-      layer.setStyle({opacity: has?1:0.1, fillOpacity: has?0.4:0.05}); if(!has) layer.closePopup();
-    });
-  }
-  document.getElementById('candFilter').addEventListener('input', applyCandidateFilter);
-
-  // Ajouter visibles
-  document.getElementById('addVisibleCandidates').onclick=()=>{
-    const q=(document.getElementById('candFilter').value||'').trim().toLowerCase();
-    candidateLayer.eachLayer(layer=>{
-      const tt=layer.getTooltip(); const label=tt? (tt.getContent()+''):''; const has = !q || label.toLowerCase().includes(q);
-      if(has){ const {lat,lng}=layer.getLatLng(); const nm=(tt?tt.getContent():'Candidat').replace(/\s+—.*/,''); addParticipant(lat,lng,'consumer',nm); }
-    });
-  };
-
-  // Export CSV candidats
-  document.getElementById('exportCsvCandidates').onclick=()=>{
-    if(!lastCandidates.length){ tSet(statusEl,'Aucun candidat chargé.'); return; }
-    const header=['name','category','osm_type','address','lat','lon','source','timestamp'];
-    const now=new Date().toISOString();
-    const rows=lastCandidates.map(c=>[c.name.replace(/;/g,','),c.category,c.type,c.address?.replace(/;/g,','),c.lat,c.lng,'OSM/Overpass',now].join(';'));
-    const csv=[header.join(';'),...rows].join('\n');
-    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='candidats_osm.csv'; a.click(); URL.revokeObjectURL(url);
-  };
-
-  // ===== POI Incendie & Secours (zone)
-  const poiStatsEl=document.getElementById('poiStats'); const poiInRangeEl=document.getElementById('poiInRange');
-  function setPoiStats(){ poiStatsEl.textContent=String(pois.length); }
-  function addPOI(lat,lng,kind,name){ const id=++uid; const label=name||kind||'POI'; const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer); const entry={id,name:label,kind,lat,lng,marker:m}; m.bindTooltip(`${safe(label)} — ${kind||'incendie'}`); pois.push(entry); setPoiStats(); updatePoiInRange(); }
-  function updatePoiInRange(center=null, R=null){ if(!center||R==null){ if(!vizCircle){ if(poiInRangeEl) poiInRangeEl.textContent='0'; return; } center=vizCircle.getLatLng(); R=(vizCircle.getRadius()||0)/1000; } let cnt=0; pois.forEach(p=>{ const inside=haversineKm(center,{lat:p.lat,lng:p.lng})<=R+eps; if(inside) cnt++; p.marker.setStyle({ color: inside?colors.poi:'#8b8b8b', weight: inside?4:2, fillColor:colors.poi, fillOpacity: inside?.55:.15 }); p.marker.bindTooltip(`${safe(p.name)} — ${inside?'dans D/2':'hors D/2'}`); }); if(poiInRangeEl) poiInRangeEl.textContent=String(cnt); }
-  document.getElementById('togglePoi').addEventListener('change', (e)=>{ if(e.target.checked){ poiLayer.addTo(map); } else { map.removeLayer(poiLayer); } });
-
-  document.getElementById('loadPoiZone').addEventListener('click', async ()=>{
-    // si zone ACC dispo, requête bbox ; sinon (fallback Isère bbox)
-    let bbox='45.00,5.10,45.80,6.45';
-    if(zoneAccPoly){ const b=zoneAccPoly.getBounds(); bbox=[b.getSouth(),b.getWest(),b.getNorth(),b.getEast()].join(','); }
-    const q=`[out:json][timeout:60];
-(node["amenity"="fire_station"](${bbox}); way["amenity"="fire_station"](${bbox}); rel["amenity"="fire_station"](${bbox}););
-out center tags;`;
-    const btn=this; tSet(statusEl,'Chargement POI incendie…');
-    const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
-    let data=null;
-    for(const ep of endpoints){ try{ const r=await fetch(ep+'?data='+encodeURIComponent(q),{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('HTTP '+r.status); data=await r.json(); break; }catch(e){} }
-    if(!data){ tSet(statusEl,'Overpass indisponible.'); return; }
-    let added=0; const seen=new Set();
-    (data.elements||[]).forEach(el=>{
-      const lat=el.lat||el.center?.lat, lng=el.lon||el.center?.lon; if(lat==null||lng==null) return;
-      const tags=el.tags||{}; const label=tags.name || 'Caserne'; const key=`${label.toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`; if(seen.has(key)) return; seen.add(key);
-      const txt=(tags.operator||'').toUpperCase(); let kind='Caserne'; if(/SDMIS/.test(txt)) kind='SDMIS'; else if(/STIS/.test(txt)) kind='STIS'; else if(/SLIS/.test(txt)) kind='SLIS'; else if(/SDIS/.test(txt)) kind='SDIS';
-      addPOI(lat,lng,kind,label); added++;
-    });
-    tSet(statusEl, `POI incendie chargés : ${added}.`);
-  });
-
-  // Lancer
-  function initDefaultProducer(){
-    const saved=localStorage.getItem('defaultProducer');
-    if(saved){ try{ const o=JSON.parse(saved); if(o&&o.lat&&o.lng){ addParticipant(o.lat,o.lng,'producer',o.name||'Producteur — défaut'); if(!document.getElementById('projName').value) document.getElementById('projName').value='Projet 1'; tSet(statusEl,'Producteur par défaut chargé.'); return; } }catch(_){ }
-    addParticipant(45.073, 5.55, 'producer', 'Producteur — défaut'); if(!document.getElementById('projName').value) document.getElementById('projName').value='Projet 1'; tSet(statusEl,'Producteur par défaut (approx.).');
-  }
-  initDefaultProducer();
-  layout();
-  tSet(statusEl,'Prêt.');
-  window.addEventListener('error', e=>{ tSet(statusEl,'Erreur JS : '+e.message); });
-  window.addEventListener('unhandledrejection', e=>{ tSet(statusEl,'Erreur Promesse : '+(e.reason?.message||e.reason)); });
-
-  // Rafraîchis quand D change
-  document.getElementById('limitSel').addEventListener('change', refreshACC);
-  document.getElementById('customKm').addEventListener('input', refreshACC);
+  async function fetchCommuneAt(lat,lon){try{const r=await fetch(`https://geo.api.gouv.fr/communes?lat=${lat}&lon=${lon}&fields=nom,epci&format=json`);const j=await r.json();return j[0];}catch(e){return null;}}
+  async function annotateLocationAtCenter(center){const c=await fetchCommuneAt(center.lat,center.lng);if(!c)return;const div=document.createElement('div');div.className='small';div.textContent=`Commune: ${c.nom} · EPCI: ${c.epci?.nom||'—'}`;statusEl.appendChild(div);}
   </script>
-
-  <!-- PWA: enregistre le Service Worker -->
-  <script>
-    if('serviceWorker' in navigator){
-      window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-    }
-  </script>
-
-  <!-- COMMENTAIRE: contenu recommandé pour manifest.webmanifest
-  {
-    "name": "ACC Echome Énergies",
-    "short_name": "ACC Echome",
-    "start_url": "./",
-    "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#37C3AF",
-    "icons": [
-      {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-      {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}
-    ]
-  }
-  -->
-
-  <!-- COMMENTAIRE: contenu recommandé pour sw.js
-  const CACHE = 'acc-app-v1';
-  const ASSETS = [
-    './','./index.html','./manifest.webmanifest',
-    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-  ];
-  self.addEventListener('install', e=>{
-    e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));
-  });
-  self.addEventListener('activate', e=>{
-    e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
-  });
-  self.addEventListener('fetch', e=>{
-    const url = new URL(e.request.url);
-    if (url.hostname.includes('tile.openstreetmap.org')) return; // pas de cache massif des tuiles
-    e.respondWith(
-      caches.match(e.request).then(r=> r || fetch(e.request).then(resp=>{
-        const copy = resp.clone(); caches.open(CACHE).then(c=>c.put(e.request, copy)); return resp;
-      }).catch(()=>r))
-    );
-  });
-  -->
 </body>
 </html>
