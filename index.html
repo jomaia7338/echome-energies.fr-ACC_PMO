@@ -3,38 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACC – Centre libre (diamètre) · Echome Énergies</title>
+  <title>ACC PV – Zone (2/10/20 km) · Ruralité auto + SDIS</title>
 
   <!-- Leaflet CSS (+ fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
-
-  <!-- Theme & PWA -->
   <meta name="theme-color" content="#37C3AF">
-  <link rel="icon" href="./icon-32.png" sizes="32x32" type="image/png">
-  <link rel="icon" href="./icon-192.png" sizes="192x192" type="image/png">
-  <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="manifest" href="./manifest.json">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
 
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
     body{margin:0;font-family:'Open Sans',system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
 
+    /* Header */
     header.slim{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:6px 8px}
     .brand{display:flex;align-items:center;gap:8px}
-    .brand img{height:26px;width:26px;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+    .brand svg{height:26px;width:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
     .brand .name{font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:.3px}
     .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between;width:100%}
     .group{display:flex;align-items:center;gap:8px}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#fff}
     .dot{width:10px;height:10px;border-radius:50%}
-    .prod{background:#6D28D9}.cons{background:#2e86de}.poi{background:#E10600}
+    .prod{background:#6D28D9}.cons{background:#2e86de}.poi{background:#E10600}.okb{background:#10b981}.warn{background:#f59e0b}
+
     .btn{padding:6px 8px;border:1px solid var(--brand);border-radius:10px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700}
     .btn.icon{padding:6px 8px;min-width:36px;display:inline-flex;align-items:center;justify-content:center}
     .btn.secondary{background:#fff;color:#0f4f47;border-color:var(--brand)}
@@ -43,78 +36,170 @@
     #status{margin:6px 8px 0;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;font-size:14px}
     #status.ok{background:rgba(55,195,175,.08);border-color:rgba(55,195,175,.45);color:#116a60}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
-
     #map{min-height:420px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
 
+    /* Drawer */
+    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:400px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
+    #drawer.open{transform:none}
+    #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
+    #drawer h2{font-family:'Montserrat',sans-serif;font-size:16px;margin:0}
+    #drawer .content{padding:12px;overflow:auto}
+    fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0;padding:10px}
+    legend{padding:0 6px;color:#475569;font-size:12px}
+    textarea{width:100%;min-height:80px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:8px}
+    .small{font-size:12px;color:#64748b}
+    .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+    /* Legend overlay */
     .legend-overlay{position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;padding:6px 8px;display:flex;gap:10px;align-items:center;font-size:12px}
     .legend-overlay .item{display:flex;align-items:center;gap:6px}
 
+    /* Scale 1:n */
     .leaflet-control.ratio-control{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;z-index:1000}
+
+    /* Tooltip center */
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 
+    /* PRINT */
     .print-header{display:none}
     .print-legend{display:none}
     @media print{
       @page { size: A4 landscape; margin: 12mm; }
-      header.slim, #status{ display:none !important; }
+      header.slim, #drawer, #status{ display:none !important; }
       body{ background:#fff; }
       .print-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
       .print-header .left{display:flex;align-items:center;gap:8px}
-      .print-header .brand img{height:26px}
+      .print-header .brand svg{height:26px}
       .print-header .title{font-family:'Montserrat',sans-serif;font-weight:700}
       #map{ height:170mm !important; min-height:170mm !important; margin:0; border:0 }
+      .leaflet-pane, .leaflet-map-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow{ transform:none !important; animation:none !important; }
+      .leaflet-container{ background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .leaflet-tile{ filter:none !important; }
       .legend-overlay{ display:none; }
       .print-legend{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;margin-top:8px;font-size:12px}
     }
+    @media (max-width: 720px){ header.slim{flex-wrap:wrap} .controls{gap:6px} }
   </style>
 </head>
 <body>
+  <!-- BARRE -->
   <header class="slim">
     <div class="brand" role="img" aria-label="Echome Énergies">
-      <img src="./icon-192.png" alt="">
+      <svg viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
+        <text x="60" y="19" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="14" fill="#ffffff">ECHOME</text>
+      </svg>
       <span class="name">Echome Énergies</span>
     </div>
+
     <div class="controls">
+      <!-- Type de point -->
       <div class="group" role="radiogroup" aria-label="Type de point (ACC)">
         <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
         <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
       </div>
+
+      <!-- Diamètre (calcul auto + verrouillage) -->
       <div class="group" aria-label="Diamètre">
-        <label class="small">Diamètre :</label>
-        <select id="limitSel" aria-label="Diamètre autorisé">
+        <label class="small">Diamètre autorisé :</label>
+        <select id="limitSel" disabled title="Calculé automatiquement (ruralité + SDIS)">
           <option value="2">2 km</option>
           <option value="10">10 km</option>
-          <option value="20" selected>20 km</option>
-          <option value="custom">Perso</option>
+          <option value="20">20 km</option>
         </select>
-        <input id="customKm" type="number" min="0" step="0.1" placeholder="km" style="width:90px;display:none" aria-label="Diamètre personnalisé">
+        <span class="chip"><span class="dot okb"></span><span id="badgeRural">Ruralité : —</span></span>
+        <span class="chip"><span class="dot warn"></span><span id="badgeSdis">SDIS participant : non</span></span>
       </div>
+
+      <!-- Actions -->
       <div class="group">
         <button id="locateBtn" class="btn icon" title="Me localiser" aria-label="Me localiser">📍</button>
         <button id="fitBtn" class="btn icon" title="Ajuster la vue" aria-label="Ajuster la vue">🗺️</button>
         <button id="printBtn" class="btn icon" title="Exporter en PDF" aria-label="Exporter en PDF">🖨️</button>
         <button id="clearBtn" class="btn icon" title="Effacer les participants" aria-label="Effacer les participants">🗑️</button>
+        <button id="gearBtn" class="btn secondary" title="Options avancées">⚙️ Options</button>
       </div>
     </div>
   </header>
 
+  <!-- En-tête impression -->
   <div class="print-header" id="printHeader">
     <div class="left brand">
-      <img src="./icon-192.png" alt="">
-      <span class="title">ACC – Centre libre (diamètre)</span>
+      <svg viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
+        <text x="60" y="19" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="14" fill="#ffffff">ECHOME</text>
+      </svg>
+      <span class="title">ACC PV – Zone (2/10/20 km)</span>
     </div>
     <div class="right small" id="printMeta"></div>
   </div>
 
   <div id="status" role="status" aria-live="polite">Initialisation…</div>
-  <div id="map" aria-label="Carte interactive">
-    <div class="legend-overlay">
+  <div id="map" aria-label="Carte interactive" tabindex="0">
+    <div class="legend-overlay" aria-hidden="true">
       <div class="item"><span class="dot prod"></span>Producteur</div>
       <div class="item"><span class="dot cons"></span>Consommateur</div>
+      <div class="item"><span class="dot poi"></span>POI incendie (SDIS/SDMIS/STIS/SLIS…)</div>
     </div>
   </div>
 
-  <!-- Leaflet -->
+  <!-- Drawer -->
+  <aside id="drawer" aria-hidden="true" aria-label="Options avancées">
+    <header>
+      <h2>Options avancées</h2>
+      <button id="drawerClose" class="btn secondary">Fermer</button>
+    </header>
+    <div class="content">
+      <fieldset>
+        <legend>Projet</legend>
+        <div class="row">
+          <label class="small">Nom du projet :</label>
+          <input id="projName" type="text" placeholder="Projet 1" style="flex:1">
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="saveLocal" class="btn">Enregistrer (local)</button>
+          <select id="projList" style="flex:1" aria-label="Projets sauvegardés"></select>
+          <button id="loadLocal" class="btn secondary">Charger</button>
+          <button id="delLocal" class="btn secondary">Supprimer</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="exportJson" class="btn">Exporter fichier</button>
+          <input id="importJson" type="file" accept="application/json">
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Import rapide (participants ACC)</legend>
+        <div class="small">Format : Nom;Lat;Lon;Type — Types : consumer / producer</div>
+        <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer"></textarea>
+        <div style="margin-top:8px"><button id="importBtn" class="btn">Importer</button></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Points d’intérêt “Incendie & Secours”</legend>
+        <div class="small">OSM/Overpass – Isère par défaut. Noms/opérateurs contenant : SDIS, SDMIS, STIS, SLIS (autres casernes incluses).</div>
+        <div class="row" style="margin-top:6px">
+          <button id="loadPoiIsere" class="btn">Charger POI Isère</button>
+          <label class="small"><input type="checkbox" id="togglePoi" checked> Afficher POI</label>
+        </div>
+        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0</span> — Dans D/2 : <span id="poiInRange">0</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Ruralité (auto & forçage) + Export zone</legend>
+        <div class="small">La ruralité est <strong>détectée automatiquement</strong> depuis la commune du <strong>premier producteur</strong> (approx. densité INSEE : population/surface). Tu peux forcer si besoin.</div>
+        <div class="row" style="margin-top:6px">
+          <label class="small"><input type="checkbox" id="forceRural"> Forcer « Commune rurale (INSEE) »</label>
+          <button id="exportCommuneBtn" class="btn secondary" title="Export GeoJSON de la commune + statut ruralité">Exporter commune (GeoJSON)</button>
+        </div>
+        <div class="small" style="margin-top:6px">Commune détectée : <span id="communeLabel">—</span> (code <span id="communeCode">—</span>) — Ruralité auto : <span id="ruralAutoLabel">—</span></div>
+      </fieldset>
+
+      <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span></div>
+    </div>
+  </aside>
+
+  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <script>
     (function ensureLeaflet(cb){ if(window.L){ cb(); return; }
@@ -125,166 +210,288 @@
     })(initApp);
 
     function initApp(){
-      const statusEl=document.getElementById('status');
-      const mapEl=document.getElementById('map');
+      const statusEl = document.getElementById('status');
+      const mapEl = document.getElementById('map');
 
-      // Utils
-      const eps=1e-9,toRad=d=>d*Math.PI/180;
-      const esc=s=>String(s||'').replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-      const safeText=s=>String(s??'');
-      const tSet=(el,txt,cls='')=>{el.className=cls;el.textContent=txt;};
-      const hSet=(el,html,cls='')=>{el.className=cls;el.innerHTML=html;};
-      const fmtDate=d=>{const p=n=>String(n).padStart(2,'0');return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;};
-      function haversineKm(a,b){const R=6371;const dLat=toRad(b.lat-a.lat),dLon=toRad(b.lng-a.lng);const lat1=toRad(a.lat),lat2=toRad(b.lat);const h=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+      // UI helpers
+      const tSet=(el,txt,cls='')=>{ el.className=cls; el.textContent=txt; };
+      const hSet=(el,html,cls='')=>{ el.className=cls; el.innerHTML=html; };
+      const esc=s=>String(s||'').replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      const safe=s=>String(s??'');
 
-      // MEC helpers
-      function projectLocal(pointsLL){const lat0=pointsLL.reduce((s,p)=>s+p.lat,0)/pointsLL.length;const lon0=pointsLL.reduce((s,p)=>s+p.lng,0)/pointsLL.length;const P=pointsLL.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180),y:(p.lat-lat0)*111.32}));return{lat0,lon0,P};}
-      function unprojectLocal(lat0,lon0,x,y){return{lat:lat0+y/111.32,lng:lon0+x/(111.32*Math.cos(lat0*Math.PI/180))};}
-      function dist2(a,b){const dx=a.x-b.x,dy=a.y-b.y;return dx*dx+dy*dy;}
-      function circleBy2(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:Math.sqrt(dist2(a,b))/2};}
-      function circleBy3(a,b,c){const A=b.x-a.x,B=b.y-a.y,C=c.x-a.x,D=c.y-a.y;const E=A*(a.x+b.x)+B*(a.y+b.y);const F=C*(a.x+c.x)+D*(a.y+c.y);const G=2*(A*(c.y-b.y)-B*(c.x-b.x));if(Math.abs(G)<1e-12)return null;const x=(D*E-B*F)/G,y=(A*F-C*E)/G,r=Math.hypot(x-a.x,y-a.y);return{x,y,r};}
-      function inCircle(c,p){return Math.hypot(c.x-p.x,c.y-p.y)<=c.r+1e-9;}
-      function minimalEnclosingCircle(pointsLL){
-        if(pointsLL.length===0) return null;
-        if(pointsLL.length===1) return {center:pointsLL[0], r:0};
-        const {lat0,lon0,P}=projectLocal(pointsLL);
-        let best=null;
-        for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){
-          const c=circleBy2(P[i],P[j]);
-          if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c;
-        }
-        for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++) for(let k=j+1;k<P.length;k++){
-          const c=circleBy3(P[i],P[j],P[k]); if(!c) continue;
-          if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c;
-        }
-        if(!best){
-          let max=-1,a=-1,b=-1;
-          for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){
-            const d=dist2(P[i],P[j]); if(d>max){max=d;a=i;b=j;}
-          }
-          best=circleBy2(P[a],P[b]);
-        }
-        const center=unprojectLocal(lat0,lon0,best.x,best.y);
-        return {center, r:best.r};
+      // Math helpers
+      const eps=1e-9, toRad=d=>d*Math.PI/180;
+      function haversineKm(a,b){ const R=6371, dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng), lat1=toRad(a.lat), lat2=toRad(b.lat);
+        const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+
+      // Minimal enclosing circle
+      function projectLocal(pts){ const lat0=pts.reduce((s,p)=>s+p.lat,0)/pts.length, lon0=pts.reduce((s,p)=>s+p.lng,0)/pts.length;
+        const P=pts.map(p=>({x:(p.lng-lon0)*111.32*Math.cos(lat0*Math.PI/180), y:(p.lat-lat0)*111.32})); return {lat0,lon0,P}; }
+      function unprojectLocal(lat0,lon0,x,y){ return {lat:lat0 + y/111.32, lng:lon0 + x/(111.32*Math.cos(lat0*Math.PI/180))}; }
+      function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
+      function circleBy2(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,r:Math.sqrt(dist2(a,b))/2}; }
+      function circleBy3(a,b,c){ const A=b.x-a.x,B=b.y-a.y,C=c.x-a.x,D=c.y-a.y,E=A*(a.x+b.x)+B*(a.y+b.y),F=C*(a.x+c.x)+D*(a.y+c.y),G=2*(A*(c.y-b.y)-B*(c.x-b.x)); if(Math.abs(G)<1e-12)return null; const x=(D*E-B*F)/G,y=(A*F-C*E)/G,r=Math.hypot(x-a.x,y-a.y); return {x,y,r}; }
+      function inCircle(c,p){ return Math.hypot(c.x-p.x,c.y-p.y)<=c.r+1e-9; }
+      function minimalEnclosingCircle(ptsLL){
+        if(ptsLL.length===0) return null; if(ptsLL.length===1) return {center:ptsLL[0], r:0};
+        const {lat0,lon0,P}=projectLocal(ptsLL); let best=null;
+        for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const c=circleBy2(P[i],P[j]); if(P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; }
+        for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++) for(let k=j+1;k<P.length;k++){ const c=circleBy3(P[i],P[j],P[k]); if(c && P.every(p=>inCircle(c,p))) if(!best||c.r<best.r) best=c; }
+        if(!best){ let m=-1,a=-1,b=-1; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const d=dist2(P[i],P[j]); if(d>m){m=d;a=i;b=j;} } best=circleBy2(P[a],P[b]); }
+        const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r};
       }
 
       // Map
-      const map=L.map('map',{zoomControl:true}).setView([45.3,5.6],8);
-      const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
-      const carto=L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© Carto, © OpenStreetMap'});
+      const map = L.map('map',{zoomControl:true}).setView([45.3,5.6],8);
+      const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+      const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© Carto, © OpenStreetMap'});
       osm.on('tileerror',()=>{ if(!map.hasLayer(carto)) carto.addTo(map); if(map.hasLayer(osm)) map.removeLayer(osm); tSet(statusEl,'Fond OSM bloqué → Carto Light.'); });
       osm.addTo(map);
       L.control.scale({imperial:false,metric:true,maxWidth:120}).addTo(map);
-
-      // Ratio 1:n
-      const RatioControl=L.Control.extend({
+      const RatioControl = L.Control.extend({
         options:{position:'topright'},
-        onAdd:function(map){const div=L.DomUtil.create('div','leaflet-control ratio-control');this._div=div;this._map=map;this._update=this._update.bind(this);map.on('zoomend moveend',this._update);this._update();return div;},
-        onRemove:function(map){map.off('zoomend moveend',this._update);},
-        _update:function(){const c=this._map.getCenter(),z=this._map.getZoom();if(z==null){this._div.textContent='Échelle —';return;}const mpp=156543.03392*Math.cos(c.lat*Math.PI/180)/Math.pow(2,z);const denom=Math.max(1,Math.round(mpp/0.0002645833333));this._div.textContent='Échelle ~ 1:'+denom.toLocaleString('fr-FR');}
+        onAdd:function(m){ const d=L.DomUtil.create('div','leaflet-control ratio-control'); this._div=d; this._map=m; this._update=this._update.bind(this); m.on('zoomend moveend',this._update); this._update(); return d; },
+        onRemove:function(m){ m.off('zoomend moveend',this._update); },
+        _update:function(){ const c=this._map.getCenter(),z=this._map.getZoom(); if(z==null){ this._div.textContent='Échelle —'; return; }
+          const mpp=156543.03392*Math.cos(c.lat*Math.PI/180)/Math.pow(2,z); const denom=Math.max(1,Math.round(mpp/0.0002645833333)); this._div.textContent='Échelle ~ 1:'+denom.toLocaleString('fr-FR'); }
       });
       map.whenReady(()=>{ map.addControl(new RatioControl()); });
 
-      function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(420, window.innerHeight - H.getBoundingClientRect().height - 16); mapEl.style.height=h+'px'; try{ map.invalidateSize(); }catch(_){ } }
-      window.addEventListener('resize', layout); setTimeout(layout, 50);
+      function layout(){ const H=document.querySelector('header.slim'); const h=Math.max(420, window.innerHeight-H.getBoundingClientRect().height-16); mapEl.style.height=h+'px'; try{ map.invalidateSize(); }catch(_){ } }
+      window.addEventListener('resize',layout); setTimeout(layout,50);
 
-      // Data & Layers
-      const participants=[]; let uid=0; let vizCircle=null;
-      const colors={producer:'#6D28D9', consumer:'#2e86de'};
+      // Data
+      const participants=[]; // {id,name,type,lat,lng,marker, flags?{sis:true}}
+      const pois=[];         // {id,name,kind,lat,lng,marker}
+      let uid=0; let vizCircle=null;
+      const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
       const participantLayer=L.layerGroup().addTo(map);
-      const producerIcon=L.icon({iconUrl:'./icon-192.png',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-24]});
+      const poiLayer=L.layerGroup().addTo(map);
+
+      // Commune/ruralité auto
+      let producerCommune = null; // {code, nom, population, surface, density, ruralAuto, geom?}
+      const COMMUNE_API_BASE = 'https://geo.api.gouv.fr';
+
+      // UI refs
+      const limitSel=document.getElementById('limitSel');
+      const badgeRural=document.getElementById('badgeRural');
+      const badgeSdis=document.getElementById('badgeSdis');
+      const communeLabel=document.getElementById('communeLabel');
+      const communeCode=document.getElementById('communeCode');
+      const ruralAutoLabel=document.getElementById('ruralAutoLabel');
+      const forceRuralChk=document.getElementById('forceRural');
 
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
-      function currentDiameter(){ const sel=document.getElementById('limitSel').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
-      function updateCount(){ const c=document.getElementById('count'); if(!c) return; const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
+      function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent=n?`${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.`:'Aucun point.'; }
 
-      function addParticipant(lat,lng,type,name){
-        const id=++uid; const label=name || `${type} ${id}`;
-        const m=(type==='producer')
-          ? L.marker([lat,lng],{icon:producerIcon})
-          : L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3});
-        m.addTo(participantLayer);
-        const entry={id,name:label,type,lat,lng,marker:m};
-        if(m.bindTooltip) m.bindTooltip(`${safeText(label)} (${type})`);
-        if(m.on) m.on('contextmenu', ()=> removeParticipant(id));
+      // Ajouter / supprimer participants
+      function addParticipant(lat,lng,type,name,flags=null){
+        const id=++uid; const label=name||`${type} ${id}`;
+        const m=L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3}).addTo(participantLayer);
+        const entry={id,name:label,type,lat,lng,marker:m,flags:flags||{}};
+        m.bindTooltip(`${esc(label)} (${type}${entry.flags?.sis?' · SIS':''})`);
+        m.bindPopup(makeParticipantPopup(entry));
+        m.on('contextmenu',()=>removeParticipant(id));
         participants.push(entry);
-        refreshACC(true);
+        // Si premier producteur → détecter la commune et ruralité
+        if(type==='producer' && participants.filter(p=>p.type==='producer').length===1){
+          detectProducerCommune(lat,lng).then(()=>{ computeAuthorizedDiameter(); refreshACC(true); });
+        }else{
+          computeAuthorizedDiameter(); refreshACC(true);
+        }
+      }
+      function makeParticipantPopup(entry){
+        const wrap=document.createElement('div');
+        const title=document.createElement('strong'); title.textContent=entry.name||''; wrap.appendChild(title);
+        wrap.appendChild(document.createElement('br'));
+        wrap.appendChild(document.createTextNode(entry.type + (entry.flags?.sis?' · SIS':'')));
+        const box=document.createElement('div'); box.style.marginTop='6px'; box.style.display='flex'; box.style.gap='6px'; box.style.flexWrap='wrap';
+        const bRen=document.createElement('button'); bRen.className='btn secondary'; bRen.textContent='Renommer';
+        bRen.onclick=()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); entry.marker.setPopupContent(makeParticipantPopup(entry)); entry.marker.bindTooltip(`${esc(entry.name)} (${entry.type}${entry.flags?.sis?' · SIS':''})`);} };
+        const bDel=document.createElement('button'); bDel.className='btn secondary'; bDel.textContent='Supprimer';
+        bDel.onclick=()=>removeParticipant(entry.id);
+        box.appendChild(bRen); box.appendChild(bDel); wrap.appendChild(box);
+        return wrap;
       }
       function removeParticipant(id){
         const i=participants.findIndex(p=>p.id===id);
-        if(i>-1){ participantLayer.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); }
+        if(i>-1){
+          participantLayer.removeLayer(participants[i].marker);
+          const wasFirstProducer = participants[i].type==='producer' && participants.filter(p=>p.type==='producer').length===1;
+          participants.splice(i,1);
+          if(wasFirstProducer){ producerCommune=null; updateCommuneUI(); }
+          computeAuthorizedDiameter(); refreshACC();
+        }
       }
       map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
+      // POI incendie
+      const poiStatsEl=document.getElementById('poiStats'); const poiInRangeEl=document.getElementById('poiInRange');
+      function setPoiStats(){ poiStatsEl.textContent=String(pois.length); }
+      function addPOI(lat,lng,kind,name){
+        const id=++uid; const label=name||kind||'POI';
+        const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
+        const entry={id,name:label,kind,lat,lng,marker:m};
+        m.bindTooltip(`${esc(label)} — ${kind||'incendie'}`);
+        m.bindPopup(makePoiPopup(entry));
+        pois.push(entry); setPoiStats(); updatePoiInRange();
+      }
+      function makePoiPopup(entry){
+        const wrap=document.createElement('div');
+        const title=document.createElement('strong'); title.textContent=entry.name||'POI'; wrap.appendChild(title);
+        wrap.appendChild(document.createElement('br'));
+        wrap.appendChild(document.createTextNode(entry.kind||'incendie'));
+        const box=document.createElement('div'); box.style.marginTop='6px'; box.style.display='flex'; box.style.gap='6px'; box.style.flexWrap='wrap';
+        const bAdd=document.createElement('button'); bAdd.className='btn'; bAdd.textContent='Ajouter comme participant (SIS)';
+        bAdd.onclick=()=>{ addParticipant(entry.lat,entry.lng,'consumer', entry.name, {sis:true}); updateSdisBadge(); };
+        box.appendChild(bAdd); wrap.appendChild(box);
+        return wrap;
+      }
+
+      // Cercle visuel ACC (centre libre)
       function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } }
       function styleParticipants(center,R){
         participants.forEach(p=>{
-          const d=haversineKm(center,{lat:p.lat,lng:p.lng});
-          const inside=d<=R+eps;
-          if(p.marker.setStyle){
-            p.marker.setStyle({
-              color: inside ? colors[p.type] : '#8b8b8b',
-              weight: inside ? 3 : 2,
-              fillColor: colors[p.type],
-              fillOpacity: inside ? 0.5 : 0.15
-            });
-          }
+          const inside=haversineKm(center,{lat:p.lat,lng:p.lng})<=R+eps;
+          p.marker.setStyle({ color: inside?colors[p.type]:'#8b8b8b', weight: inside?3:2, fillColor:colors[p.type], fillOpacity: inside?0.5:0.15 });
         });
       }
       function refreshACC(autoFit=false){
-        const D=currentDiameter(); const R=D/2;
+        updateCount();
+        const D=parseFloat(limitSel.value)||2; const R=D/2;
         clearVizCircle();
-        if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); return; }
-        if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); return; }
-
+        if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); poiInRangeEl.textContent='0'; return; }
+        if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); poiInRangeEl.textContent='0'; return; }
         const mec=minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng})));
-        if(!mec){ tSet(statusEl,'Centre libre non calculable.'); return; }
+        if(!mec){ tSet(statusEl,'Centre libre non calculable.'); poiInRangeEl.textContent='0'; return; }
         const pass=mec.r<=R+eps;
-
-        vizCircle=L.circle([mec.center.lat,mec.center.lng],{radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6'})
-          .addTo(map).bindTooltip('Centre libre (visualisation) — centre non défini',{className:'center-free-tip'});
-
+        vizCircle=L.circle([mec.center.lat,mec.center.lng],{radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6'}).addTo(map)
+          .bindTooltip('Centre libre (visualisation) — centre non défini',{className:'center-free-tip'});
         styleParticipants(mec.center,R);
-
-        if(autoFit && participants.length>1){
-          const g=L.featureGroup(participants.map(p=>p.marker));
-          map.fitBounds(g.getBounds().pad(0.25));
-        }
-
+        if(autoFit && participants.length>1){ const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); }
         const outside=participants.filter(p=>haversineKm(mec.center,{lat:p.lat,lng:p.lng})>R+eps).map(p=>p.name||p.type);
         if(pass){ hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok'); }
-        else{ hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko'); }
+        else { hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko'); }
+        updatePoiInRange(mec.center,R);
+      }
+      function updatePoiInRange(center=null,R=null){
+        if(!center||R==null){ if(!vizCircle){ poiInRangeEl.textContent='0'; return; } center=vizCircle.getLatLng(); R=(vizCircle.getRadius()||0)/1000; }
+        let cnt=0; pois.forEach(p=>{ const inside=haversineKm(center,{lat:p.lat,lng:p.lng})<=R+eps; if(inside)cnt++;
+          p.marker.setStyle({ color: inside?colors.poi:'#8b8b8b', weight: inside?4:2, fillColor:colors.poi, fillOpacity: inside?0.55:0.15 });
+          p.marker.bindTooltip(`${esc(p.name)} — ${inside?'dans D/2':'hors D/2'}`); });
+        poiInRangeEl.textContent=String(cnt);
       }
 
-      // UI
-      document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display=(v==='custom')?'inline-block':'none'; refreshACC(); });
-      document.getElementById('customKm').addEventListener('input', refreshACC);
-      document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
-      document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
+      // Diamètre autorisé = f(ruralité, SDIS participant)
+      function hasSdisParticipant(){ return participants.some(p=>p.flags&&p.flags.sis===true); }
+      function updateSdisBadge(){ badgeSdis.textContent='SDIS participant : '+(hasSdisParticipant()?'oui':'non'); }
+      function updateCommuneUI(){
+        if(!producerCommune){ communeLabel.textContent='—'; communeCode.textContent='—'; ruralAutoLabel.textContent='—'; badgeRural.textContent='Ruralité : —'; return; }
+        communeLabel.textContent=producerCommune.nom||'—'; communeCode.textContent=producerCommune.code||'—';
+        ruralAutoLabel.textContent = producerCommune.ruralAuto ? 'oui (auto)' : 'non (auto)';
+        badgeRural.textContent='Ruralité : '+(forceRuralChk.checked || producerCommune.ruralAuto ? 'oui' : 'non');
+      }
+      function computeAuthorizedDiameter(){
+        // Règle : base 2 km ; si rural (auto ou forcée) -> 10 km ; si SDIS participant -> 20 km
+        const rural = (forceRuralChk.checked) || (producerCommune && producerCommune.ruralAuto===true);
+        const sdis = hasSdisParticipant();
+        let D = 2;
+        if(rural) D = 10;
+        if(sdis) D = 20; // prioritaire
+        limitSel.value = String(D);
+        updateSdisBadge(); updateCommuneUI();
+      }
+      forceRuralChk.addEventListener('change', ()=>{ computeAuthorizedDiameter(); refreshACC(); });
 
-      // Geoloc
-      let myMarker=null, myAccCircle=null;
-      function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker); myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle); myAccCircle=null;} }
-      document.getElementById('locateBtn').addEventListener('click', ()=>{
-        if(!navigator.geolocation){ tSet(statusEl,'Géolocalisation non supportée.'); return; }
-        navigator.geolocation.getCurrentPosition(pos=>{
-          const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy||50;
-          clearMyLoc();
-          const myIcon=L.divIcon({className:'myloc-pin', html:`<svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/><circle cx="16" cy="12" r="5" fill="#34D399"/></svg>`, iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-28]});
-          myMarker=L.marker([lat,lng],{icon:myIcon,zIndexOffset:1000}).addTo(map).bindTooltip('Vous êtes ici');
-          myAccCircle=L.circle([lat,lng],{radius:acc,color:'#34D399',weight:1,opacity:0.5,fillOpacity:0.06}).addTo(map);
-          map.setView([lat,lng], 15);
-          tSet(statusEl,`Localisé (~±${Math.round(acc)} m).`);
-        }, ()=> tSet(statusEl,'Géolocalisation refusée / indisponible.'), {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
+      // Détection commune + ruralité approx (population / surface)
+      async function detectProducerCommune(lat,lng){
+        try{
+          const url = `${COMMUNE_API_BASE}/communes?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&fields=code,nom,population,surface&format=json&type=commune-actuelle`;
+          const r = await fetch(url,{headers:{'Accept':'application/json'}});
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          const arr = await r.json();
+          if(!Array.isArray(arr)||!arr.length){ producerCommune=null; updateCommuneUI(); return; }
+          const c = arr[0]; // meilleure correspondance
+          const surface_m2 = c.surface || 0; const pop = c.population || 0;
+          const km2 = surface_m2 ? (surface_m2/1e6) : 0;
+          const density = (km2>0) ? (pop/km2) : null;
+          // Heuristique "rural" : densité < 150 hab/km² (approx. de la grille INSEE)
+          const ruralAuto = (density!=null) ? (density < 150) : false;
+          producerCommune = { code:c.code, nom:c.nom, population:pop, surface:surface_m2, density, ruralAuto, geom:null };
+          updateCommuneUI();
+          // Tenter de récupérer le polygone pour export (optionnel)
+          try{
+            const g = await fetch(`${COMMUNE_API_BASE}/communes?code=${encodeURIComponent(c.code)}&format=geojson`);
+            if(g.ok){ const gj=await g.json(); if(gj&&gj.features&&gj.features[0]){ producerCommune.geom = gj.features[0].geometry; } }
+          }catch(_){}
+        }catch(e){
+          producerCommune=null; updateCommuneUI();
+        }
+      }
+
+      // Export commune (GeoJSON + ruralité)
+      document.getElementById('exportCommuneBtn').addEventListener('click', ()=>{
+        if(!producerCommune){ tSet(statusEl,'Aucune commune producteur détectée.'); return; }
+        const feat = { type:'Feature', properties:{
+          code: producerCommune.code, nom: producerCommune.nom,
+          population: producerCommune.population, surface_m2: producerCommune.surface,
+          density_hab_km2: producerCommune.density, rural_auto: producerCommune.ruralAuto
+        }, geometry: producerCommune.geom || null };
+        const blob = new Blob([JSON.stringify(feat,null,2)],{type:'application/geo+json'});
+        const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`commune_${producerCommune.code}.geojson`; a.click(); URL.revokeObjectURL(url);
       });
 
+      // Top bar actions
+      document.getElementById('clearBtn').onclick=()=>{ participants.slice().forEach(p=>removeParticipant(p.id)); };
+      document.getElementById('fitBtn').onclick=()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
+
+      // Localisation
+      let myMarker=null,myAccCircle=null;
+      function clearMyLoc(){ if(myMarker){map.removeLayer(myMarker);myMarker=null;} if(myAccCircle){map.removeLayer(myAccCircle);myAccCircle=null;} }
+      document.getElementById('locateBtn').addEventListener('click',()=>{
+        if(!navigator.geolocation){ tSet(statusEl,'Géolocalisation non supportée.'); return; }
+        navigator.geolocation.getCurrentPosition(pos=>{
+          const lat=pos.coords.latitude,lng=pos.coords.longitude,acc=pos.coords.accuracy||50; clearMyLoc();
+          const myIcon=L.divIcon({className:'myloc-pin',html:`<svg width="28" height="28" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M16 2C10.477 2 6 6.477 6 12c0 7 10 18 10 18s10-11 10-18C26 6.477 21.523 2 16 2z" fill="#111827"/><circle cx="16" cy="12" r="5" fill="#34D399"/></svg>`,iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-28]});
+          myMarker=L.marker([lat,lng],{icon:myIcon,zIndexOffset:1000}).addTo(map).bindTooltip('Vous êtes ici');
+          myAccCircle=L.circle([lat,lng],{radius:acc,color:'#34D399',weight:1,opacity:0.5,fillOpacity:0.06}).addTo(map);
+          map.setView([lat,lng],15); tSet(statusEl,`Localisé (~±${Math.round(acc)} m).`);
+        },()=>tSet(statusEl,'Géolocalisation refusée / indisponible.'),{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
+      });
+
+      // Drawer
+      const drawer=document.getElementById('drawer');
+      document.getElementById('gearBtn').onclick=()=>{ refreshProjectList(); drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); };
+      document.getElementById('drawerClose').onclick=()=>{ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); };
+
+      // Projets (participants + settings minimales)
+      function captureState(){ return {
+        name:(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1',
+        settings:{ diameter: limitSel.value, forceRural: forceRuralChk.checked, producerCommune },
+        participants: participants.map(p=>({name:p.name,lat:p.lat,lng:p.lng,type:p.type,flags:p.flags||{}}))
+      }; }
+      function applyState(st){
+        participants.slice().forEach(p=>removeParticipant(p.id));
+        document.getElementById('projName').value=st.name||'Projet';
+        forceRuralChk.checked=!!(st.settings?.forceRural);
+        producerCommune = st.settings?.producerCommune || null; updateCommuneUI();
+        (st.participants||[]).forEach(p=>addParticipant(p.lat,p.lng,p.type,p.name,p.flags||{}));
+        computeAuthorizedDiameter(); refreshACC(true);
+      }
+      function lsKey(name){ return 'acc_project:'+name; }
+      function refreshProjectList(){ const sel=document.getElementById('projList'); const keys=[]; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith('acc_project:')) keys.push(k.slice('acc_project:'.length)); } keys.sort((a,b)=>a.localeCompare(b)); sel.innerHTML=''; keys.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); }); }
+      document.getElementById('saveLocal').onclick=()=>{ const st=captureState(); localStorage.setItem(lsKey(st.name),JSON.stringify(st)); refreshProjectList(); tSet(statusEl,'Projet enregistré (local).'); };
+      document.getElementById('loadLocal').onclick=()=>{ const sel=document.getElementById('projList'); const n=sel.value; if(!n) return; try{ const st=JSON.parse(localStorage.getItem(lsKey(n))); if(st) applyState(st); tSet(statusEl,'Projet chargé.'); }catch(_){ tSet(statusEl,'Chargement impossible.'); } };
+      document.getElementById('delLocal').onclick=()=>{ const sel=document.getElementById('projList'); const n=sel.value; if(!n) return; localStorage.removeItem(lsKey(n)); refreshProjectList(); tSet(statusEl,'Projet supprimé.'); };
+      document.getElementById('exportJson').onclick=()=>{ const st=captureState(); const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(st.name||'projet_acc')+'.json'; a.click(); URL.revokeObjectURL(url); };
+      document.getElementById('importJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé.'); }catch(_){ tSet(statusEl,'Fichier invalide.'); } });
+
       // Impression
+      function fmtDate(d){ const p=n=>String(n).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
       function updatePrintHeader(){
-        const D = (document.getElementById('limitSel').value==='custom'
-          ? (parseFloat(document.getElementById('customKm').value)||20)
-          : parseFloat(document.getElementById('limitSel').value));
-        const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
-        document.getElementById('printMeta').textContent = `D=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
+        const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
+        const D=limitSel.value; const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
+        document.getElementById('printMeta').textContent = `${name} — D autorisé=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
       }
       async function ensureTilesReady(timeout=2000){
         return new Promise(resolve=>{
@@ -295,31 +502,94 @@
           setTimeout(resolve, timeout);
         });
       }
-      document.getElementById('printBtn').onclick = async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(2000); window.print(); };
-      window.addEventListener('beforeprint', async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(1500); });
+      document.getElementById('printBtn').onclick=async()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(2000); window.print(); };
+      window.addEventListener('beforeprint', async()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(1500); });
       window.addEventListener('afterprint', ()=>{ setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 100); });
 
-      // Search address
-      async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry, p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1], lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label || p.name || q, lat, lng}; }).filter(Boolean); }
+      // Recherche adresse (pour placer un point rapidement)
+      async function geocodePhoton(q){ const url='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&lang=fr&limit=5'; const r=await fetch(url); if(!r.ok) throw new Error('Photon'); const j=await r.json(); return (j.features||[]).map(f=>{ const g=f.geometry,p=f.properties||{}; if(!g||!g.coordinates) return null; const lat=g.coordinates[1],lng=g.coordinates[0]; const label=[p.housenumber,p.street,p.name,p.city,p.postcode].filter(Boolean).join(' '); return {label: label||p.name||q, lat, lng}; }).filter(Boolean); }
       async function geocodeNominatim(q){ const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q='+encodeURIComponent(q); const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('Nominatim'); const j=await r.json(); return j.map(o=>({label:o.display_name,lat:parseFloat(o.lat),lng:parseFloat(o.lon)})); }
-      async function searchAddress(q){ const box=document.getElementById('searchResults'); if(!box) return; box.textContent='Recherche…'; let res=[]; try{ res=await geocodePhoton(q); }catch(_){ } if(!res.length){ try{ res=await geocodeNominatim(q); }catch(_){ } }
-        if(!res.length){ box.textContent='Aucun résultat ou service indisponible.'; return; }
-        const ul=document.createElement('ul'); res.forEach(r=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=r.label; a.dataset.lat=String(r.lat); a.dataset.lng=String(r.lng); a.dataset.label=r.label; li.appendChild(a); ul.appendChild(li); }); box.innerHTML=''; box.appendChild(ul);
+
+      // POI Isère (Overpass)
+      document.getElementById('loadPoiIsere').addEventListener('click', loadPoiIsere);
+      document.getElementById('togglePoi').addEventListener('change', e=>{ if(e.target.checked){ poiLayer.addTo(map);} else { map.removeLayer(poiLayer);} });
+
+      async function loadPoiIsere(){
+        const queries=[
+`[out:json][timeout:60];
+(
+  rel["admin_level"="6"]["ref:INSEE"="38"];
+  rel["admin_level"="6"]["name"="Isère"];
+  rel["admin_level"="6"]["name"="Isere"];
+); map_to_area->.a;
+(
+  node["amenity"="fire_station"](area.a);
+  way["amenity"="fire_station"](area.a);
+  relation["amenity"="fire_station"](area.a);
+); out center tags;`,
+`[out:json][timeout:60];
+(
+  node["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  way["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  relation["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+); out center tags;`
+        ];
+        const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
+        const btn=document.getElementById('loadPoiIsere'); const prev=btn.textContent; btn.disabled=true; btn.textContent='Chargement…';
+
+        function kindFromTags(tags){ const up=s=>String(s||'').toUpperCase(); const name=up(tags.name),op=up(tags.operator);
+          if(/SDMIS/.test(name)||/SDMIS/.test(op)) return 'SDMIS';
+          if(/STIS/.test(name)||/STIS/.test(op)) return 'STIS';
+          if(/SLIS/.test(name)||/SLIS/.test(op)) return 'SLIS';
+          if(/SDIS/.test(name)||/SDIS/.test(op)) return 'SDIS';
+          return 'Caserne';
+        }
+        function parseAndAdd(j){
+          const els=Array.isArray(j.elements)?j.elements:[]; let ok=0; const seen=new Set();
+          for(const el of els){
+            let lat=null,lng=null; if(el.type==='node'){lat=el.lat;lng=el.lon;} else if(el.center){lat=el.center.lat;lng=el.center.lon;}
+            if(lat==null||lng==null) continue;
+            const tags=el.tags||{}; const label=tags.name||tags['addr:place']||tags['addr:city']||'Caserne';
+            const key=`${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+            if(seen.has(key)) continue; seen.add(key);
+            addPOI(lat,lng,kindFromTags(tags),label); ok++;
+          }
+          return ok;
+        }
+        let success=false;
+        try{
+          for(const q of queries){ if(success) break;
+            for(const ep of endpoints){
+              try{
+                const r=await fetch(ep+'?data='+encodeURIComponent(q),{headers:{'Accept':'application/json'}});
+                if(!r.ok) throw new Error('HTTP '+r.status);
+                const j=await r.json(); const k=parseAndAdd(j); if(k>0){ success=true; break; }
+              }catch(e){/* try next */}
+            }
+          }
+          tSet(statusEl, success?'POI Isère chargés.':'Aucun POI trouvé (aire/bbox).');
+        }finally{ btn.disabled=false; btn.textContent=prev; }
       }
 
-      // Diagnostics
+      // Sélecteur Diamètre (verrouillé, uniquement mis à jour par computeAuthorizedDiameter)
+      limitSel.addEventListener('change', ()=> refreshACC());
+
+      // Impression fiable
+      async function ensureTilesReady(timeout=2000){
+        return new Promise(resolve=>{
+          const start=Date.now(); const tiles=[...document.querySelectorAll('.leaflet-tile')];
+          if(tiles.length===0){ resolve(); return; }
+          let remaining=tiles.length; const done=()=>{ if(--remaining<=0 || (Date.now()-start)>timeout) resolve(); };
+          tiles.forEach(img=>{ if(img.complete && img.naturalWidth>0){ done(); } else { img.addEventListener('load',done,{once:true}); img.addEventListener('error',done,{once:true}); } });
+          setTimeout(resolve, timeout);
+        });
+      }
+
+      // Lancement
+      layout(); tSet(statusEl,'Prêt.');
       window.addEventListener('error', e=>{ tSet(statusEl,'Erreur JS : '+e.message); });
       window.addEventListener('unhandledrejection', e=>{ tSet(statusEl,'Erreur Promesse : '+(e.reason?.message||e.reason)); });
-
-      // Auto set size
-      layout();
-      tSet(statusEl,'Prêt.');
-
-      // Click add participant
-      document.getElementById('map').addEventListener('click', (e)=>{ /* Leaflet handles */ });
-
-      // Keyboard shortcuts, etc. (optionnel)
-    } // fin initApp()
+    }
   </script>
 </body>
 </html>
