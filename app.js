@@ -61,7 +61,7 @@ function isValidLatLon(lat, lon){
 }
 
 // ================== App state ==================
-const STORAGE_NS = 'echome-acc-github-v16';
+const STORAGE_NS = 'echome-acc-sec-v17';
 const STORAGE_LAST = `${STORAGE_NS}:lastProjectId`;
 const projectKey = (id) => `${STORAGE_NS}:project:${id}`;
 const newId = () => (crypto?.randomUUID?.() || String(Date.now()));
@@ -78,19 +78,18 @@ const app = {
   // modes 1-tap
   mode: null,           // 'set-producer' | 'add-part' | null
 
-  // Overlays & couches
   layers:{
     producer: null,
     parts: L.layerGroup(),
     worstLine: null, worstLabel: null,
-
-    // Boucle ACC centrée libre (déplaçable)
-    accCircle: null,      // L.circle (rayon = D/2)
-    accCenter: null,      // L.marker draggable (centre libre)
-
-    // UI info (Leaflet control)
+    accCircle: null,    // Cercle ACC (rayon = D/2) centré sur SEC.c
     infoCtrl: null
-  }
+  },
+
+  // cache SEC (centre libre auto)
+  secCenter: null,      // {lat, lon}
+  secRadiusKm: 0,       // rayon du SEC (km)
+  _didFitOnce: false
 };
 
 // ================== Map ==================
@@ -120,16 +119,12 @@ function setupMap(){
   app.map.touchZoom.enable();
   app.map.doubleClickZoom.enable();
 
-  // Instancie la boucle ACC (centre libre) au 1er affichage
-  ensureAccCircle();
-
-  // Contrôle d’info (diamètre & rayon)
+  // Contrôle d’info (diamètre / pire paire / statut)
   app.layers.infoCtrl = L.control({ position:'topleft' });
   app.layers.infoCtrl.onAdd = function(){
     const div = L.DomUtil.create('div','acc-info-box');
-    div.style.cssText = 'margin:6px 0 0 6px;background:#0f1426cc;color:#fff;border:1px solid #20263d;padding:6px 8px;border-radius:8px;font-size:12px;line-height:1.3;user-select:none';
-    div.innerHTML = infoBoxHTML();
-    // éviter propagation des gestures à la carte
+    div.style.cssText = 'margin:6px 0 0 6px;background:#0f1426cc;color:#fff;border:1px solid #20263d;padding:6px 8px;border-radius:8px;font-size:12px;line-height:1.3;user-select:none;min-width:210px';
+    div.innerHTML = infoBoxHTML({ worstKm: null, ok: null });
     L.DomEvent.disableClickPropagation(div);
     L.DomEvent.disableScrollPropagation(div);
     return div;
@@ -137,18 +132,20 @@ function setupMap(){
   app.layers.infoCtrl.addTo(app.map);
 }
 
-function infoBoxHTML(){
+function infoBoxHTML({ worstKm, ok }){
   const r = (app.distMaxKm/2);
+  const status = (ok===null) ? '—' : (ok ? '✅ Conforme' : '⚠️ Hors limite');
+  const worstTxt = (worstKm===null) ? '—' : `${worstKm.toFixed(2)} km`;
   return `
-    <div><b>Boucle ACC</b></div>
-    <div>Diamètre&nbsp;: <b>${app.distMaxKm} km</b></div>
-    <div>Rayon&nbsp;: <b>${r} km</b></div>
+    <div><b>Zone ACC</b></div>
+    <div>Diamètre autorisé : <b>${app.distMaxKm} km</b> (rayon ${r} km)</div>
+    <div>Distance max observée : <b>${worstTxt}</b></div>
+    <div>${status}</div>
   `;
 }
-
-function refreshInfoBox(){
+function refreshInfoBox(worstKm=null, ok=null){
   const boxes = document.getElementsByClassName('acc-info-box');
-  if(boxes && boxes[0]) boxes[0].innerHTML = infoBoxHTML();
+  if(boxes && boxes[0]) boxes[0].innerHTML = infoBoxHTML({ worstKm, ok });
 }
 
 // Appui long carte → ajoute un consommateur
@@ -214,28 +211,43 @@ function clearProducer(){
 }
 
 // ================== Participants ==================
-function bindMarkerDeletion(marker, payload){
-  const html = `<div style="min-width:160px">
-    <b>${payload.nom || 'Participant'}</b><br>
-    ${payload.type || 'consumer'}<br>
-    ${payload.lat.toFixed(5)}, ${payload.lon.toFixed(5)}<br>
-    <button id="del-${payload.id}" class="btn danger" style="margin-top:6px">Supprimer</button>
+function bindMarkerUI(marker, p){
+  // Distances pour le popup
+  const secC = app.secCenter;
+  const dToProd = (app.producteur) ? distKm(p, app.producteur) : null;
+  const dToC    = (secC) ? distKm(p, secC) : null;
+
+  const html = `<div style="min-width:190px">
+    <b>${p.nom || 'Participant'}</b><br>
+    ${p.type || 'consumer'}<br>
+    ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}<br>
+    ${dToProd!==null ? `<span style="font-size:12px;color:#c6c9d1">→ Prod. ${dToProd.toFixed(2)} km</span><br>`:''}
+    ${dToC!==null ? `<span style="font-size:12px;color:#c6c9d1">→ Centre zone ${dToC.toFixed(2)} km</span><br>`:''}
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button id="center-${p.id}" class="btn" style="flex:1">Centrer</button>
+      <button id="del-${p.id}" class="btn danger" style="flex:1">Supprimer</button>
+    </div>
   </div>`;
   marker.bindPopup(html);
   marker.on('popupopen', ()=>{
-    const btn = document.getElementById(`del-${payload.id}`);
-    if(btn) btn.onclick = ()=> { marker.closePopup(); removeParticipant(payload.id); setStatus('Participant supprimé'); };
+    const bDel = document.getElementById(`del-${p.id}`);
+    const bCtr = document.getElementById(`center-${p.id}`);
+    if(bDel) bDel.onclick = ()=> { marker.closePopup(); removeParticipant(p.id); setStatus('Participant supprimé'); };
+    if(bCtr) bCtr.onclick = ()=> { marker.closePopup(); app.map.setView([p.lat,p.lon], Math.max(14, app.map.getZoom())); };
   });
+
+  // Appui long (mobile) = confirmation suppression
   let t=null, pressed=false;
   marker.on('touchstart', ()=>{
     pressed=true;
     t=setTimeout(()=>{
       if(!pressed) return;
-      if(confirm(`Supprimer "${payload.nom}" ?`)){ removeParticipant(payload.id); setStatus('Participant supprimé'); }
+      if(confirm(`Supprimer "${p.nom}" ?`)){ removeParticipant(p.id); setStatus('Participant supprimé'); }
     }, 650);
   });
   marker.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
 }
+
 function addParticipant(p){
   if(!isValidLatLon(p.lat, p.lon)){ showError('Coordonnées participant invalides'); return; }
   app.participants.push(p);
@@ -251,7 +263,7 @@ function redrawParticipants(){
     const color = p.type==='producer' ? '#f5b841' : '#4ea2ff';
     const marker = L.circleMarker([p.lat,p.lon], { radius:6, color, weight:2, fillOpacity:.75 })
       .addTo(app.layers.parts);
-    bindMarkerDeletion(marker, p);
+    bindMarkerUI(marker, p);
   });
   const wrap = $('listParts'); if(wrap){ wrap.innerHTML='';
     app.participants.forEach(p=>{
@@ -263,55 +275,45 @@ function redrawParticipants(){
   }
 }
 
-// ================== Boucle ACC : cercle centre libre ==================
-function ensureAccCircle(){
-  const defaultCenter = app.layers.accCenter
-    ? app.layers.accCenter.getLatLng()
-    : (app.producteur ? L.latLng(app.producteur.lat, app.producteur.lon) : app.map.getCenter());
-
-  const radiusMeters = (app.distMaxKm/2) * 1000; // D/2
-
-  if(!app.layers.accCircle){
-    app.layers.accCircle = L.circle(defaultCenter, {
-      radius: radiusMeters,
-      color: '#6e5bfd',
-      weight: 3, opacity: 1,
-      fillOpacity: 0.06, fillColor: '#6e5bfd',
-      dashArray: '8,6'
-    }).addTo(app.map);
-  }else{
-    app.layers.accCircle.setLatLng(defaultCenter);
-    app.layers.accCircle.setRadius(radiusMeters);
+// ================== SEC (centre libre auto) ==================
+function circleFrom2(a,b){
+  const cx = (a.lon + b.lon)/2, cy = (a.lat + b.lat)/2;
+  const r = distKm(a,b)/2;
+  return { c:{lat:cy, lon:cx}, rKm:r };
+}
+function circleFrom3(a,b,c){
+  // approx plane locale
+  const ax=a.lon, ay=a.lat, bx=b.lon, by=b.lat, cx=c.lon, cy=c.lat;
+  const d = 2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+  if (Math.abs(d) < 1e-12) return null;
+  const ux = ((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d;
+  const uy = ((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d;
+  const center = { lon:ux, lat:uy };
+  const r = Math.max(distKm(center,a), distKm(center,b), distKm(center,c));
+  return { c:center, rKm:r };
+}
+function isIn(circle, p){ return distKm(circle.c, p) <= circle.rKm + 1e-6; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function secWelzl(P, R=[]){
+  if(P.length===0 || R.length===3){
+    if(R.length===0) return null;
+    if(R.length===1) return { c:R[0], rKm:0 };
+    if(R.length===2) return circleFrom2(R[0], R[1]);
+    return circleFrom3(R[0], R[1], R[2]);
   }
-
-  if(!app.layers.accCenter){
-    // marqueur centre (draggable) — centre libre
-    app.layers.accCenter = L.marker(defaultCenter, {
-      draggable:true,
-      title:'Centre de la boucle ACC (déplaçable)',
-      icon: L.divIcon({ className:'acc-center', html:'<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #6e5bfd;box-shadow:0 0 0 2px rgba(110,91,253,.35)"></div>', iconSize:[14,14], iconAnchor:[7,7] })
-    }).addTo(app.map);
-
-    // Drag du centre → déplace le cercle
-    app.layers.accCenter.on('drag', ()=>{
-      const { lat, lng } = app.layers.accCenter.getLatLng();
-      app.layers.accCircle.setLatLng([lat, lng]);
-    });
-    app.layers.accCenter.on('dragend', ()=> setStatus('Centre de la boucle déplacé'));
-  }else{
-    app.layers.accCenter.setLatLng(defaultCenter);
-  }
+  const p = P.pop();
+  const D = secWelzl(P, R);
+  if(D && isIn(D, p)) return D;
+  return secWelzl(P, R.concat([p]));
+}
+function smallestEnclosingCircle(points){
+  if(points.length===0) return null;
+  const copy = points.map(p=>({lat:p.lat, lon:p.lon}));
+  shuffle(copy);
+  return secWelzl(copy, []);
 }
 
-// Pour mettre à jour le rayon quand on change D
-function updateAccCircleRadius(){
-  ensureAccCircle();
-  const r = (app.distMaxKm/2) * 1000;
-  app.layers.accCircle.setRadius(r);
-  refreshInfoBox();
-}
-
-// ================== Pire paire (critère juridique) ==================
+// ================== Overlays : zone ACC (D/2) & pire paire ==================
 function worstPair(points){
   let worst={d:0,a:null,b:null};
   for(let i=0;i<points.length;i++){
@@ -335,40 +337,89 @@ function drawWorstOverlay(w, D){
   app.layers.worstLabel = L.marker([mid.lat, mid.lon], { icon: L.divIcon({ className:'maxpair-label', html:`${w.d.toFixed(2)} km / ≤ ${D} km` }) }).addTo(app.map);
 }
 
-// ================== Conformité ==================
-function updateCompliance(){
-  const pts = [];
-  if(app.producteur) pts.push({ ...app.producteur, nom:'Producteur', type:'producer' });
-  app.participants.forEach(p=>pts.push(p));
-
-  // MAJ cercle + panneau info
-  ensureAccCircle();
-  updateAccCircleRadius();
-
-  if(pts.length < 2){
-    clearWorstOverlay();
-    $('badgeCompliance').textContent = '—';
-    setStatus(`Diamètre = ${app.distMaxKm} km — poser des points`);
-    return;
+function drawAccCircle(center, ok){
+  const radiusMeters = (app.distMaxKm/2) * 1000; // rayon légal
+  const color = ok ? '#2ecc71' : '#e67e22';
+  if(!app.layers.accCircle){
+    app.layers.accCircle = L.circle([center.lat, center.lon], {
+      radius: radiusMeters,
+      color, weight: 3, opacity: 1,
+      fillOpacity: 0.06, fillColor: color,
+      dashArray: '8,6'
+    }).addTo(app.map);
+  }else{
+    app.layers.accCircle.setLatLng([center.lat, center.lon]);
+    app.layers.accCircle.setRadius(radiusMeters);
+    app.layers.accCircle.setStyle({ color, fillColor: color });
   }
-  const w = worstPair(pts);
-  const ok = w.d <= app.distMaxKm;
-  $('badgeCompliance').textContent = ok ? '✔︎' : '✖︎';
-  setStatus(`Diamètre = ${app.distMaxKm} km  •  Pire paire = ${w.d.toFixed(2)} km`);
-  drawWorstOverlay(w, app.distMaxKm);
+}
+
+// ================== Conformité & rendu ==================
+function getAllPoints(){
+  const pts=[]; if(app.producteur) pts.push(app.producteur);
+  app.participants.forEach(p=>pts.push(p));
+  return pts;
+}
+
+function updateCompliance(){
+  const pts = getAllPoints();
+
+  // SEC (centre libre auto)
+  const sec = smallestEnclosingCircle(pts);
+  app.secCenter = sec?.c || (app.producteur || null);
+  app.secRadiusKm = sec?.rKm || 0;
+
+  // Pire paire (juridique)
+  let worst = null, ok = null;
+  if(pts.length >= 2){
+    worst = worstPair(pts);
+    ok = worst.d <= app.distMaxKm;
+    drawWorstOverlay(worst, app.distMaxKm);
+  }else{
+    clearWorstOverlay();
+  }
+
+  // Zone ACC = cercle de rayon D/2, centré SEC.c (ou producteur si 0/1 point)
+  const center = app.secCenter || (app.producteur ? app.producteur : app.map.getCenter());
+  // Coloration : vert si SEC.diamètre ≤ D (i.e., 2*secRadius ≤ D), sinon orange
+  const okBySEC = (app.secRadiusKm*2) <= app.distMaxKm;
+  drawAccCircle(center, okBySEC);
+
+  // Info box
+  refreshInfoBox(worst?.d ?? null, ok);
+
+  // Auto-fit (une fois à la première définition)
+  if(!app._didFitOnce && pts.length >= 1){
+    fitToProject();
+    app._didFitOnce = true;
+  }
+
+  // Badge top/bottom
+  const badge = $('badgeCompliance');
+  if(badge) badge.textContent = (ok===null) ? '—' : (ok ? '✔︎' : '✖︎');
+
+  setStatus(`Diamètre = ${app.distMaxKm} km • Max paire = ${worst?.d?.toFixed ? worst.d.toFixed(2) : '—'} km`);
+}
+
+function fitToProject(){
+  const layers = [];
+  if(app.layers.accCircle) layers.push(app.layers.accCircle);
+  if(app.layers.parts) layers.push(app.layers.parts);
+  if(app.layers.producer) layers.push(app.layers.producer);
+  if(layers.length===0) return;
+  try{
+    const group = L.featureGroup(layers);
+    const b = group.getBounds();
+    if(b.isValid()) app.map.fitBounds(b.pad(0.25), { maxZoom: 15 });
+  }catch{}
 }
 
 // ================== Persistence ==================
 function getPayload(){
-  // Sauvegarde aussi le centre libre de la boucle
-  const center = app.layers.accCenter ? app.layers.accCenter.getLatLng() : null;
-  const accCenter = center ? { lat:center.lat, lon:center.lng } : null;
-
-  return { __v:4, savedAt:new Date().toISOString(), state:{
+  return { __v:5, savedAt:new Date().toISOString(), state:{
     distMaxKm: app.distMaxKm,
     producteur: app.producteur,
-    participants: app.participants,
-    accCenter
+    participants: app.participants
   }};
 }
 function saveProject(){
@@ -394,22 +445,7 @@ function applyPayload(payload){
     const d = Number(b.getAttribute('data-d')); const active = d === app.distMaxKm;
     b.classList.toggle('active', active); b.setAttribute('aria-pressed', active ? 'true':'false');
   });
-  refreshInfoBox();
 
-  // Producteur
-  if(app.producteur && isValidLatLon(app.producteur.lat, app.producteur.lon)){
-    setProducer(app.producteur, { reverse:true });
-    app.map.setView([app.producteur.lat, app.producteur.lon], 13);
-  }else{
-    clearProducer();
-  }
-
-  // Centre boucle ACC (si sauvegardé)
-  ensureAccCircle();
-  if(s.accCenter && isValidLatLon(s.accCenter.lat, s.accCenter.lon)){
-    app.layers.accCenter.setLatLng([s.accCenter.lat, s.accCenter.lon]);
-    app.layers.accCircle.setLatLng([s.accCenter.lat, s.accCenter.lon]);
-  }
   afterModelChange();
 }
 
@@ -496,7 +532,6 @@ function wireDiameterChips(){
       document.querySelectorAll('#chipDiameter .chip').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-pressed','false'); });
       btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
       app.distMaxKm = Number(btn.getAttribute('data-d')) || 2;
-      updateAccCircleRadius();
       onProjectChanged();
     });
   });
@@ -505,7 +540,7 @@ function wireDiameterChips(){
 // ================== Reactions ==================
 function afterModelChange(){
   redrawParticipants();
-  updateCompliance();   // pire paire + MAJ cercle + panneau info
+  updateCompliance();
   saveProject();
 }
 function onProjectChanged(){
