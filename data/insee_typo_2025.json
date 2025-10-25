@@ -2,6 +2,21 @@
   "38185": "urbaine",          // Grenoble
   "38169": "urbaine",          // Fontaine
   "38474": "urbaine",          // Sassenage
-  "38563": "périurbaine",      // Voiron (ex : périurbain pour démo)
-  "38450": "rurale"            // Saint-Quentin-sur-Isère
+  "38421": "urbaine",          // Saint-Martin-d'Hères
+  "38053": "urbaine",          // Échirolles
+  "38151": "urbaine",          // Eybens
+  "38151": "urbaine",          // (Eybens)
+  "38229": "périurbaine",      // Voiron (périurbain pour la démo)
+  "38563": "périurbaine",      // Voiron (code INSEE = 38563)
+  "38242": "périurbaine",      // Voreppe
+  "38229": "périurbaine",      // Moirans (INSEE = 38239, cf. ligne suivante)
+  "38239": "périurbaine",      // Moirans
+  "38271": "périurbaine",      // Tullins
+  "38261": "périurbaine",      // Saint-Égrève
+  "38325": "périurbaine",      // Sassenage (déjà urbaine plus haut — garde celui qui te convient)
+  "38450": "rurale",           // Saint-Quentin-sur-Isère
+  "38022": "rurale",           // Autrans-Méaudre en Vercors
+  "38160": "rurale",           // Saint-Geoirs (ex. pour zones rurales)
+  "38192": "rurale",           // La Rivière
+  "38225": "rurale"            // Saint-Paul-de-Varces
 }
