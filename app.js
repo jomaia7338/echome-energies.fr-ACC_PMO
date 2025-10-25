@@ -1,13 +1,14 @@
 /* ==========================================================
-   Echome Énergies – ACC terrain (v23)
+   Echome Énergies – ACC terrain (v24)
    - Correctifs lat/lon vs lat/lng (normalisation)
    - Modes Producteur / Consommateur robustes
    - Suppression producteur : long-press / double-tap / contextmenu
    - Ajout consommateur : tap (mode) + long-press (global)
    - Diamètre auto via INSEE (reverse commune + JSON local typologie)
    - Chips 2/10/20 en délégation (toujours à jour)
-   - SDIS/SIS local (GeoJSON) avec toggle
+   - SDIS/SIS local (GeoJSON) avec toggle + géométries mixtes tolérées
    - CP -> communes (jeu local)
+   - fitToProject() défensif (plus de i.getLatLng)
    ========================================================== */
 
 /* ================= Helpers ================= */
@@ -83,7 +84,7 @@ function smallestEnclosingCircle(points){
 }
 
 /* ================= App state ================= */
-const STORAGE_NS = 'echome-acc-autonome-v23';
+const STORAGE_NS = 'echome-acc-autonome-v24';
 const STORAGE_LAST = `${STORAGE_NS}:lastProjectId`;
 const projectKey = (id) => `${STORAGE_NS}:project:${id}`;
 
@@ -348,9 +349,7 @@ function redrawParticipants(){
     const m = L.circleMarker([p.lat,p.lon],{ radius:6, color, weight:2, fillOpacity:.8 }).addTo(app.layers.parts);
     bindMarkerUI(m, p);
   });
-}
-
-/* ================= Conformité & zone ACC ================= */
+} /* ================= Conformité & zone ACC ================= */
 function worstPair(points){
   let worst={d:0,a:null,b:null};
   for(let i=0;i<points.length;i++){
@@ -403,8 +402,12 @@ function updateCompliance(){
   if(pts.length>=2){ worst=worstPair(pts); ok = worst.d <= app.distMaxKm; drawWorstOverlay(worst, app.distMaxKm); }
   else { clearWorstOverlay(); }
 
-  const fallbackCenter = toLatLon(app.producteur) || toLatLon(app.map.getCenter());
+  // Centre de repli ultra-sûr
+  const mapCenterLeaf = (app.map && typeof app.map.getCenter==='function') ? app.map.getCenter() : { lat:45.191, lng:5.684 };
+  const mapCenter = toLatLon(mapCenterLeaf) || { lat:45.191, lon:5.684 };
+  const fallbackCenter = app.producteur ? app.producteur : mapCenter;
   const centerLike = app.secCenter || fallbackCenter;
+
   const okBySEC = (app.secRadiusKm*2) <= app.distMaxKm; // diamètre SEC ≤ D
   drawAccCircle(centerLike, okBySEC);
 
@@ -416,13 +419,39 @@ function updateCompliance(){
 
   setStatus(`Diamètre = ${app.distMaxKm} km • Max paire = ${worst?.d?.toFixed ? worst.d.toFixed(2) : '—'} km`);
 }
+
+/* ===== fitToProject défensif : plus de i.getLatLng on non-point ===== */
 function fitToProject(){
-  const layers=[]; if(app.layers.accCircle) layers.push(app.layers.accCircle);
-  if(app.layers.parts) layers.push(app.layers.parts);
-  if(app.layers.producer) layers.push(app.layers.producer);
-  if(layers.length===0) return;
-  const group=L.featureGroup(layers); const b=group.getBounds();
-  if(b.isValid()) app.map.fitBounds(b.pad(0.25),{ maxZoom:15 });
+  const bounds = L.latLngBounds([]);
+
+  // 1) Cercle ACC (a un getBounds)
+  if (app.layers.accCircle && typeof app.layers.accCircle.getBounds === 'function') {
+    bounds.extend(app.layers.accCircle.getBounds());
+  }
+  // 2) Producteur (point)
+  if (app.layers.producer && typeof app.layers.producer.getLatLng === 'function') {
+    bounds.extend(app.layers.producer.getLatLng());
+  }
+  // 3) Participants (LayerGroup) : descend et traite seulement ce qui a bounds/latlng
+  if (app.layers.parts && typeof app.layers.parts.eachLayer === 'function') {
+    app.layers.parts.eachLayer(l => {
+      if (typeof l.getBounds === 'function') {
+        bounds.extend(l.getBounds());
+      } else if (typeof l.getLatLng === 'function') {
+        bounds.extend(l.getLatLng());
+      }
+    });
+  }
+  // 4) Worst overlays
+  if (app.layers.worstLine && typeof app.layers.worstLine.getBounds === 'function') {
+    bounds.extend(app.layers.worstLine.getBounds());
+  }
+  if (app.layers.worstLabel && typeof app.layers.worstLabel.getLatLng === 'function') {
+    bounds.extend(app.layers.worstLabel.getLatLng());
+  }
+
+  if (!bounds.isValid()) return;
+  app.map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
 }
 
 /* ================= CP -> communes (jeu local) ================= */
@@ -453,15 +482,34 @@ async function ensureSdisLayerLoaded(){
   if(app.layers.sdisLayer) return true;
   const gj = await loadLocalJSON(PATH_SDIS);
   if(!gj){ showError('SDIS/SIS indisponibles (data/sdis_sis.geojson manquant)'); return false; }
+
   app.layers.sdisLayer = L.geoJSON(gj, {
     pointToLayer: (feat, latlng)=> L.circleMarker(latlng,{ radius:5, color:'#ff3b30', weight:2, fillOpacity:.85 }),
     onEachFeature: (feat, layer)=>{
-      const props=feat.properties||{};
-      const name = props.nom || props.NOM || 'SDIS/SIS';
-      const ll = toLatLon(layer.getLatLng());
-      layer.bindPopup(`<b>${name}</b><br>${latlonStr(ll)}`);
-      // Double-tap: ajouter comme participant SDIS + forcer D=20 km
+      const props = feat.properties || {};
+      const name  = props.nom || props.NOM || 'SDIS/SIS';
+      let ll = null;
+
+      // Essai #1 : API Leaflet (si point)
+      if (typeof layer.getLatLng === 'function') {
+        const raw = layer.getLatLng(); // {lat, lng}
+        ll = { lat: Number(raw.lat), lon: Number(raw.lng) };
+      }
+      // Essai #2 : GeoJSON brut (Point)
+      if (!ll && feat.geometry && feat.geometry.type === 'Point' && Array.isArray(feat.geometry.coordinates)) {
+        const [gx, gy] = feat.geometry.coordinates; // [lon, lat]
+        if (Number.isFinite(gx) && Number.isFinite(gy)) {
+          ll = { lat: gy, lon: gx };
+        }
+      }
+
+      // Popup
+      if (ll) layer.bindPopup(`<b>${name}</b><br>${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}`);
+      else    layer.bindPopup(`<b>${name}</b>`);
+
+      // Double-tap : ajoute comme participant SDIS + force D=20
       layer.on('dblclick', ()=>{
+        if (!ll) return; // pas de position exploitable
         addParticipant({ id:newId(), nom:name, lat:ll.lat, lon:ll.lon, type:'sdis' });
         setDiameter(20);
         setStatus('SDIS ajouté (diamètre = 20 km)');
@@ -545,11 +593,9 @@ function wireModeButtons(){
 
   app.mode = null; // par défaut : navigation libre
   syncModeUI();
-}
-
-/* ================= Persistence ================= */
+} /* ================= Persistence ================= */
 function getPayload(){
-  return { __v:8, savedAt:new Date().toISOString(), state:{
+  return { __v:9, savedAt:new Date().toISOString(), state:{
     distMaxKm: app.distMaxKm,
     producteur: app.producteur,
     participants: app.participants
