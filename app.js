@@ -1,11 +1,16 @@
 /* ==========================================================
-   Echome Énergies – ACC terrain (v22)
-   Correctifs: lat/lon vs lat/lng, auto-D via INSEE (reverse),
-   modes explicites, long-press producteur -> supprimer,
-   SDIS local (toggle)
+   Echome Énergies – ACC terrain (v23)
+   - Correctifs lat/lon vs lat/lng (normalisation)
+   - Modes Producteur / Consommateur robustes
+   - Suppression producteur : long-press / double-tap / contextmenu
+   - Ajout consommateur : tap (mode) + long-press (global)
+   - Diamètre auto via INSEE (reverse commune + JSON local typologie)
+   - Chips 2/10/20 en délégation (toujours à jour)
+   - SDIS/SIS local (GeoJSON) avec toggle
+   - CP -> communes (jeu local)
    ========================================================== */
 
-// =============== Helpers ===============
+/* ================= Helpers ================= */
 const $ = (id) => document.getElementById(id);
 const setStatus = (m) => { const el = $('status'); if (el) el.textContent = m; };
 const showError = (m) => {
@@ -18,7 +23,7 @@ const showError = (m) => {
 const newId = () => (crypto?.randomUUID?.() || String(Date.now()));
 const isFiniteNum = (x)=>Number.isFinite(x);
 
-// Normalise n’importe quel objet {lat, lon|lng} en {lat, lon}
+// Normalise {lat, lon|lng} -> {lat, lon}
 function toLatLon(obj){
   if(!obj) return null;
   const lat = Number(obj.lat);
@@ -26,9 +31,14 @@ function toLatLon(obj){
   if(!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return { lat, lon };
 }
-function latlngStringLL(ll){ return `${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}`; }
+function isValidLatLon(lat, lon){
+  return Number.isFinite(lat) && Number.isFinite(lon)
+    && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+    && !(lat === 0 && lon === 0);
+}
+function latlonStr(ll){ return `${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}`; }
 
-// =============== Géodésie ===============
+/* ================= Géodésie ================= */
 function haversineMeters(a,b){
   const R=6371000, toRad=d=>d*Math.PI/180;
   const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
@@ -37,11 +47,8 @@ function haversineMeters(a,b){
   return 2*R*Math.asin(Math.sqrt(h));
 }
 const distKm = (a,b)=>haversineMeters(a,b)/1000;
-function isValidLatLon(lat, lon){
-  return isFiniteNum(lat)&&isFiniteNum(lon) && Math.abs(lat)<=90 && Math.abs(lon)<=180 && !(lat===0&&lon===0);
-}
 
-// =============== SEC (smallest enclosing circle) ===============
+/* ================= SEC (smallest enclosing circle) ================= */
 function circleFrom2(a,b){
   const cx=(a.lon+b.lon)/2, cy=(a.lat+b.lat)/2, r=distKm(a,b)/2;
   return { c:{lat:cy, lon:cx}, rKm:r };
@@ -75,8 +82,8 @@ function smallestEnclosingCircle(points){
   shuffle(copy); return secWelzl(copy,[]);
 }
 
-// =============== App state ===============
-const STORAGE_NS = 'echome-acc-autonome-v22';
+/* ================= App state ================= */
+const STORAGE_NS = 'echome-acc-autonome-v23';
 const STORAGE_LAST = `${STORAGE_NS}:lastProjectId`;
 const projectKey = (id) => `${STORAGE_NS}:project:${id}`;
 
@@ -85,7 +92,7 @@ const app = {
   map:null,
   projectId:null,
 
-  distMaxKm: 2,             // Diamètre 2 | 10 | 20 km (rayon D/2)
+  distMaxKm: 2,             // Diamètre 2|10|20 (rayon = D/2)
   producteur: null,         // {lat, lon}
   participants: [],         // [{id, nom, lat, lon, type}]
 
@@ -107,7 +114,7 @@ const app = {
   _didFitOnce:false
 };
 
-// =============== Données locales ===============
+/* ================= Données locales (autonomie) ================= */
 let INSEE_TYPO = {};          // { INSEE: "urbaine" | "périurbaine" | "rurale" }
 let CP_INDEX = {};            // { "38000":[{code, nom, lat, lon}, ...], ... }
 const PATH_TYPO = 'data/insee_typo_2025.json';
@@ -124,9 +131,8 @@ async function loadLocalJSON(url){
   }
 }
 
-// =============== INSEE reverse by point (autonome + API publique) ===============
+/* ================= INSEE reverse (point -> commune) ================= */
 async function fetchCommuneByPoint(lat, lon){
-  // API publique gratuite, renvoie la commune à partir du point
   const url = `https://geo.api.gouv.fr/communes?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&fields=nom,code,centre,codeDepartement&format=json`;
   try{
     const r = await fetch(url, { cache:'no-store' });
@@ -148,18 +154,14 @@ function setDiameterFromInsee(codeInsee, communeName){
   const ty = INSEE_TYPO[codeInsee] || null;
   const D = diameterFromTypology(ty);
   if(D){
-    app.distMaxKm=D; updateCompliance(); saveProject();
-    document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
-      const d=Number(b.getAttribute('data-d')); const active=d===app.distMaxKm;
-      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
-    });
+    setDiameter(D);
     setStatus(`Commune: ${communeName||codeInsee} • Typologie: ${ty} • Diamètre = ${D} km`);
   }else{
     setStatus(`Typologie inconnue pour ${communeName||codeInsee}. Choisis 2/10/20 km.`);
   }
 }
 
-// =============== Map setup ===============
+/* ================= Map / UI ================= */
 function setupMap(){
   app.map = L.map('map', { zoomControl:true }).setView([45.191, 5.684], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
@@ -168,22 +170,29 @@ function setupMap(){
   L.control.scale({ position:'topleft', imperial:false, maxWidth:160 }).addTo(app.map);
   app.layers.parts.addTo(app.map);
 
-  // Tap selon mode courant
+  // TAP carte : agit SEULEMENT si un mode est actif
   app.map.on('click', (e)=>{
-    if(app.mode === 'producer' || (!app.producteur && app.mode===null)){
+    if(app.mode === 'producer'){
       setProducer({ lat:e.latlng.lat, lon:e.latlng.lng }, { autoCommune:true });
-      setStatus('Producteur défini'); return;
+      setStatus('Producteur défini/déplacé');
+      return;
     }
     if(app.mode === 'consumer'){
-      addParticipant({ id:newId(), nom:`Consommateur ${app.participants.length+1}`, lat:e.latlng.lat, lon:e.latlng.lng, type:'consumer' });
-      setStatus('Consommateur ajouté'); return;
+      addParticipant({
+        id:newId(),
+        nom:`Consommateur ${app.participants.length+1}`,
+        lat:e.latlng.lat, lon:e.latlng.lng, type:'consumer'
+      });
+      setStatus('Consommateur ajouté');
+      return;
     }
+    // mode nul => navigation carte uniquement
   });
 
-  // Appui long = ajout rapide consommateur (terrain)
+  // APPUI LONG carte = ajout rapide consommateur (même si mode nul)
   enableLongPressAddOnMap();
 
-  // Pavé info (D / pire paire / statut)
+  // Pavé info
   app.layers.infoCtrl = L.control({ position:'topleft' });
   app.layers.infoCtrl.onAdd = function(){
     const div = L.DomUtil.create('div','acc-info-box');
@@ -216,24 +225,24 @@ function enableLongPressAddOnMap(){
   let t=null, started=false, startPt=null;
   app.map.on('touchstart',(e)=>{
     started=true;
-    const t0=e.touches?.[0]; if(!t0) return;
-    startPt={x:t0.clientX,y:t0.clientY};
-    t=setTimeout(()=>{
+    const t0 = e.touches?.[0]; if(!t0) return;
+    startPt = { x:t0.clientX, y:t0.clientY };
+    t = setTimeout(()=>{
       if(!started) return;
-      const pt=app.map.mouseEventToLatLng({clientX:startPt.x, clientY:startPt.y, target: app.map._container});
+      const pt = app.map.mouseEventToLatLng({ clientX:startPt.x, clientY:startPt.y, target: app.map._container });
       const nom = prompt('Nom du consommateur :', `Consommateur ${app.participants.length+1}`) || `Consommateur ${app.participants.length+1}`;
       addParticipant({ id:newId(), nom, lat:pt.lat, lon:pt.lng, type:'consumer' });
       setStatus('Consommateur ajouté (pression longue)');
-    },650);
-  },{passive:true});
+    }, 650);
+  }, { passive:true });
   app.map.on('touchmove',(e)=>{
     const t1 = e.touches?.[0]; if(!t1||!startPt) return;
-    if(Math.hypot(t1.clientX-startPt.x, t1.clientY-startPt.y)>12){ started=false; if(t) clearTimeout(t); }
-  },{passive:true});
+    if(Math.hypot(t1.clientX-startPt.x, t1.clientY-startPt.y) > 12){ started=false; if(t) clearTimeout(t); }
+  }, { passive:true });
   app.map.on('touchend',()=>{ started=false; if(t) clearTimeout(t); });
 }
 
-// =============== Producteur & participants ===============
+/* ================= Producteur & participants ================= */
 function setProducer({lat, lon}, opts={}){
   if(!isValidLatLon(lat,lon)) return showError('Coordonnées producteur invalides');
   app.producteur = { lat, lon };
@@ -242,35 +251,47 @@ function setProducer({lat, lon}, opts={}){
     app.layers.producer = L.marker([lat,lon],{
       draggable:true,
       title:'Producteur',
-      icon: L.divIcon({ className:'prod-icon', html:'<div class="pin" style="width:18px;height:18px;border-radius:50%;background:#f5b841;border:2px solid #b58900"></div>', iconSize:[20,20], iconAnchor:[10,20] })
+      icon: L.divIcon({
+        className:'prod-icon',
+        html:'<div class="pin" style="width:18px;height:18px;border-radius:50%;background:#f5b841;border:2px solid #b58900"></div>',
+        iconSize:[20,20], iconAnchor:[10,20]
+      })
     }).addTo(app.map);
 
-    // Drag = repositionner
+    // Drag = repositionner + recalcul auto
     app.layers.producer.on('dragend', ()=>{
       const { lat:la, lng:lo } = app.layers.producer.getLatLng();
       setProducer({ lat:la, lon:lo }, { autoCommune:true });
     });
 
-    // Appui long = supprimer producteur
+    // Appui long = supprimer
     let t=null, pressed=false;
     app.layers.producer.on('touchstart', ()=>{
       pressed=true;
       t=setTimeout(()=>{
         if(!pressed) return;
-        if(confirm('Supprimer le producteur ?')){
-          clearProducer();
-          setStatus('Producteur supprimé');
-        }
+        if(confirm('Supprimer le producteur ?')){ clearProducer(); setStatus('Producteur supprimé'); }
       }, 650);
     });
     app.layers.producer.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
+
+    // Double-tap = supprimer
+    app.layers.producer.on('dblclick', ()=>{
+      if(confirm('Supprimer le producteur ?')){ clearProducer(); setStatus('Producteur supprimé'); }
+    });
+
+    // Menu contextuel = supprimer
+    app.layers.producer.on('contextmenu', ()=>{
+      if(confirm('Supprimer le producteur ?')){ clearProducer(); setStatus('Producteur supprimé'); }
+    });
+
   }else{
     app.layers.producer.setLatLng([lat,lon]);
   }
 
   afterModelChange();
 
-  // Auto commune -> auto diamètre (INSEE_TYPO)
+  // Auto-commune → auto-diamètre si jeux locaux dispo
   if(opts.autoCommune){
     (async ()=>{
       const c = await fetchCommuneByPoint(lat, lon);
@@ -329,7 +350,7 @@ function redrawParticipants(){
   });
 }
 
-// =============== Conformité & zone ACC ===============
+/* ================= Conformité & zone ACC ================= */
 function worstPair(points){
   let worst={d:0,a:null,b:null};
   for(let i=0;i<points.length;i++){
@@ -404,7 +425,7 @@ function fitToProject(){
   if(b.isValid()) app.map.fitBounds(b.pad(0.25),{ maxZoom:15 });
 }
 
-// =============== CP -> communes (jeu local) ===============
+/* ================= CP -> communes (jeu local) ================= */
 function wirePostalLookup(){
   const input=$('cpInput'), btn=$('btnSearchCP'), list=$('cpResults');
   if(!input||!btn||!list) return;
@@ -427,7 +448,7 @@ function wirePostalLookup(){
   });
 }
 
-// =============== SDIS/SIS (couche locale) ===============
+/* ================= SDIS/SIS (couche locale) ================= */
 async function ensureSdisLayerLoaded(){
   if(app.layers.sdisLayer) return true;
   const gj = await loadLocalJSON(PATH_SDIS);
@@ -438,15 +459,11 @@ async function ensureSdisLayerLoaded(){
       const props=feat.properties||{};
       const name = props.nom || props.NOM || 'SDIS/SIS';
       const ll = toLatLon(layer.getLatLng());
-      layer.bindPopup(`<b>${name}</b><br>${latlngStringLL(ll)}`);
+      layer.bindPopup(`<b>${name}</b><br>${latlonStr(ll)}`);
       // Double-tap: ajouter comme participant SDIS + forcer D=20 km
       layer.on('dblclick', ()=>{
         addParticipant({ id:newId(), nom:name, lat:ll.lat, lon:ll.lon, type:'sdis' });
-        app.distMaxKm = 20; updateCompliance(); saveProject();
-        document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
-          const d=Number(b.getAttribute('data-d')); const active=d===20;
-          b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
-        });
+        setDiameter(20);
         setStatus('SDIS ajouté (diamètre = 20 km)');
       });
     }
@@ -465,33 +482,74 @@ async function toggleSDIS(on){
   }
 }
 
-// =============== UI wiring ===============
-function wireModeButtons(){
-  const bProd=$('btnModeProducer'), bCons=$('btnModeConsumer'), bSdis=$('btnToggleSDIS');
-  if(bProd){ bProd.onclick=()=>{ app.mode='producer'; setStatus('Mode Producteur (tap pour poser)'); }; }
-  if(bCons){ bCons.onclick=()=>{ app.mode='consumer'; setStatus('Mode Consommateur (tap pour poser)'); }; }
-  if(bSdis){ bSdis.onclick=async ()=>{
-    const on = !app.layers.sdisOn; await toggleSDIS(on);
-    bSdis.setAttribute('aria-pressed', on?'true':'false');
-    bSdis.classList.toggle('active', on);
-  }; }
+/* ================= Modes & chips (robustes) ================= */
+function setDiameter(d){
+  const D = Number(d) || 2;
+  app.distMaxKm = D;
+  // MAJ UI chips
+  const wrap = document.getElementById('chipDiameter');
+  if(wrap){
+    wrap.querySelectorAll('.chip').forEach(b=>{
+      const isActive = Number(b.getAttribute('data-d')) === D;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+  onProjectChanged();
+  setStatus(`Diamètre = ${D} km`);
 }
 
 function wireDiameterChips(){
-  document.querySelectorAll('#chipDiameter .chip').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      document.querySelectorAll('#chipDiameter .chip').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-pressed','false'); });
-      btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
-      app.distMaxKm = Number(btn.getAttribute('data-d')) || 2;
-      onProjectChanged();
-      setStatus(`Diamètre manuel = ${app.distMaxKm} km`);
-    });
+  const wrap = document.getElementById('chipDiameter');
+  if(!wrap) return;
+  // Délégation
+  wrap.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.chip[data-d]');
+    if(!btn) return;
+    setDiameter(btn.getAttribute('data-d'));
   });
+  // Sync initiale
+  setDiameter(app.distMaxKm);
 }
 
-// =============== Persistence ===============
+function wireModeButtons(){
+  const bProd=$('btnModeProducer'), bCons=$('btnModeConsumer'), bSdis=$('btnToggleSDIS');
+
+  const syncModeUI = ()=>{
+    if(bProd) bProd.classList.toggle('active', app.mode==='producer');
+    if(bCons) bCons.classList.toggle('active', app.mode==='consumer');
+  };
+
+  if(bProd){
+    bProd.onclick = ()=>{
+      app.mode = 'producer';
+      setStatus('Mode Producteur (tap = poser/déplacer)');
+      syncModeUI();
+    };
+  }
+  if(bCons){
+    bCons.onclick = ()=>{
+      app.mode = 'consumer';
+      setStatus('Mode Consommateur (tap = poser)');
+      syncModeUI();
+    };
+  }
+  if(bSdis){
+    bSdis.onclick = async ()=>{
+      const on = !app.layers.sdisOn;
+      await toggleSDIS(on);
+      bSdis.setAttribute('aria-pressed', on?'true':'false');
+      bSdis.classList.toggle('active', on);
+    };
+  }
+
+  app.mode = null; // par défaut : navigation libre
+  syncModeUI();
+}
+
+/* ================= Persistence ================= */
 function getPayload(){
-  return { __v:7, savedAt:new Date().toISOString(), state:{
+  return { __v:8, savedAt:new Date().toISOString(), state:{
     distMaxKm: app.distMaxKm,
     producteur: app.producteur,
     participants: app.participants
@@ -514,14 +572,18 @@ function applyPayload(payload){
   app.distMaxKm = s.distMaxKm ?? 2;
   app.producteur = s.producteur || null;
   app.participants = Array.isArray(s.participants)?s.participants:[];
-  document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
-    const d=Number(b.getAttribute('data-d')); const active=d===app.distMaxKm;
-    b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
-  });
+  // Sync chips
+  const wrap = document.getElementById('chipDiameter');
+  if(wrap){
+    wrap.querySelectorAll('.chip').forEach(b=>{
+      const d=Number(b.getAttribute('data-d')); const active=d===app.distMaxKm;
+      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
+    });
+  }
   afterModelChange();
 }
 
-// =============== Reactions ===============
+/* ================= Reactions ================= */
 function afterModelChange(){
   redrawParticipants();
   updateCompliance();
@@ -532,23 +594,26 @@ function onProjectChanged(){
   saveProject();
 }
 
-// =============== Bootstrap ===============
+/* ================= Bootstrap ================= */
 (async function init(){
   try{
     setStatus('Initialisation…');
     setupMap();
 
+    // Données locales
     const [typo, cpIndex] = await Promise.all([ loadLocalJSON(PATH_TYPO), loadLocalJSON(PATH_CP) ]);
     if(typo) INSEE_TYPO = typo; else console.warn('INSEE_TYPO manquant (data/insee_typo_2025.json)');
     if(cpIndex) CP_INDEX = cpIndex; else console.warn('CP_INDEX manquant (data/cp_communes_index.json)');
 
-    // Cercle initial (D/2) même sans points (centre = centre carte normalisé)
+    // Cercle initial (D/2) même sans points
     updateCompliance();
 
+    // UI
     wireModeButtons();
     wireDiameterChips();
     wirePostalLookup();
 
+    // Restore projet si présent
     const fromUrl = new URLSearchParams(location.search).get('project') || localStorage.getItem(STORAGE_LAST);
     if(fromUrl){
       const payload = loadProjectById(fromUrl);
