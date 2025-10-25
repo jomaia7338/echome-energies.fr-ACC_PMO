@@ -1,5 +1,7 @@
 {
-  "38185": "urbaine",
-  "38198": "rurale",
-  "38229": "périurbaine"
+  "38185": "urbaine",          // Grenoble
+  "38169": "urbaine",          // Fontaine
+  "38474": "urbaine",          // Sassenage
+  "38563": "périurbaine",      // Voiron (ex : périurbain pour démo)
+  "38450": "rurale"            // Saint-Quentin-sur-Isère
 }
