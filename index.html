@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Echome Énergies — ACC/PMO (Débug)</title>
-
+  <title>Echome Énergies – ACC terrain</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1426">
   <!-- Leaflet -->
   <link
     rel="stylesheet"
@@ -12,457 +12,121 @@
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   />
+  <!-- Styles (mets ton CSS ici / ou styles.css) -->
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Fallback minimal si styles.css absent (optionnel) */
+    html, body { height:100%; margin:0; background:#0b1020; color:#e8eaf0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .topbar { position:fixed; top:0; left:0; right:0; height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:#0f1426cc; backdrop-filter:saturate(140%) blur(6px); border-bottom:1px solid #20263d; z-index:10020; }
+    .brand { font-weight:700; letter-spacing:.2px; }
+    .status-line { font-size:12px; opacity:.85; }
+    .badge { display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; border-radius:999px; background:#20263d; margin-left:8px; }
+    .map-stage { margin-top:44px; }
+    #map { width:100%; height: calc(100dvh - 44px - 72px); background:#000; }
+    .btmbar { position:fixed; left:0; right:0; bottom:0; height:72px; padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px)) 8px; background:#0f1426f2; border-top:1px solid #20263d; display:flex; gap:8px; align-items:center; overflow-x:auto; z-index:10010; }
+    .btmbar::-webkit-scrollbar { display:none; }
+    .btn, .chip { flex:0 0 auto; border:1px solid #2a3150; background:#141a31; color:#e8eaf0; border-radius:10px; height:40px; padding:0 12px; font-weight:600; }
+    .btn.active, .chip.active { border-color:#6e5bfd; box-shadow:0 0 0 2px #6e5bfd33 inset; }
+    .chip { border-radius:999px; }
+    .group { display:flex; gap:6px; align-items:center; }
+    .split { width:1px; height:24px; background:#20263d; }
+    .panel { position:fixed; left:8px; right:8px; bottom:84px; background:#0f1426cc; border:1px solid #20263d; border-radius:12px; padding:10px; z-index:10005; max-height:40dvh; overflow:auto; }
+    .panel h3 { margin:0 0 8px 0; font-size:14px; }
+    #cpResults { list-style:none; padding:0; margin:8px 0 0 0; }
+    #cpResults li { padding:8px 10px; border:1px solid #20263d; border-radius:10px; margin-bottom:6px; cursor:pointer; background:#141a31; }
+    .list { position:fixed; right:8px; top:56px; width:280px; max-height:50dvh; overflow:auto; padding:8px; background:#0f1426cc; border:1px solid #20263d; border-radius:12px; z-index:10005; }
+    .part { display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid #20263d; background:#141a31; border-radius:10px; padding:8px; margin-bottom:6px; }
+    .part .meta { font-size:12px; opacity:.75; }
+    #error-box { position:fixed; left:8px; right:8px; top:56px; max-height:24dvh; overflow:auto; white-space:pre-wrap; background:#331a1a; border:1px solid #5a2a2a; color:#ffdede; border-radius:10px; padding:8px; z-index:10025; }
+    .hidden { display:none; }
+    .leaflet-bottom { bottom: 80px; } /* remonte au-dessus de la barre */
+    .acc-info-box { margin:6px 0 0 6px; }
+  </style>
+</head>
+<body>
+  <!-- Barre haute -->
+  <header class="topbar" role="banner">
+    <div class="brand">Echome Énergies — ACC</div>
+    <div class="status-line">
+      <span id="status">Initialisation…</span>
+      <span class="badge" id="badgeCompliance" aria-label="Conformité">—</span>
+    </div>
+  </header>
+
+  <!-- Carte -->
+  <main class="map-stage" role="main">
+    <div id="map" class="map" aria-label="Carte principale"></div>
+  </main>
+
+  <!-- Panneau erreurs (affiché si besoin) -->
+  <pre id="error-box" class="hidden" aria-live="polite"></pre>
+
+  <!-- Liste (optionnelle) des participants -->
+  <aside class="list" aria-label="Participants / Points" id="asideParts">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <strong>Participants</strong>
+      <button class="btn" onclick="this.closest('.list').classList.toggle('hidden')">Masquer</button>
+    </div>
+    <div id="listParts"></div>
+  </aside>
+
+  <!-- Barre d’actions “one hand” -->
+  <nav class="btmbar" role="navigation" aria-label="Actions principales">
+    <div class="group" id="chipDiameter" aria-label="Diamètre ACC">
+      <button type="button" class="chip active" data-d="2" aria-pressed="true" title="Diamètre 2 km">D 2 km</button>
+      <button type="button" class="chip" data-d="10" aria-pressed="false" title="Diamètre 10 km">D 10 km</button>
+      <button type="button" class="chip" data-d="20" aria-pressed="false" title="Diamètre 20 km">D 20 km</button>
+    </div>
+
+    <div class="split" aria-hidden="true"></div>
+
+    <div class="group" aria-label="Modes de placement">
+      <button type="button" class="btn" id="btnModeProducer" title="Placer le producteur">Producteur</button>
+      <button type="button" class="btn" id="btnModeConsumer" title="Placer un consommateur">Consommateur</button>
+    </div>
+
+    <div class="split" aria-hidden="true"></div>
+
+    <div class="group" aria-label="Couche SDIS/SIS">
+      <button type="button" class="chip" id="btnToggleSDIS" aria-pressed="false" title="Afficher / masquer la couche SDIS/SIS">SDIS / SIS</button>
+    </div>
+
+    <div class="split" aria-hidden="true"></div>
+
+    <!-- Recherche par code postal → communes INSEE → fixe D selon typologie (jeu local) -->
+    <div class="group" aria-label="Commune (code postal)">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="Code postal" id="cpInput" style="height:40px;border-radius:10px;border:1px solid #2a3150;background:#141a31;color:#e8eaf0;padding:0 10px;min-width:110px" />
+      <button type="button" class="btn" id="btnSearchCP" title="Rechercher la commune">Chercher</button>
+    </div>
+  </nav>
+
+  <!-- Panneau de résultats CP -->
+  <section class="panel" id="cpPanel" aria-label="Communes trouvées">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>Communes (jeu local)</h3>
+      <button class="btn" onclick="document.getElementById('cpPanel').classList.toggle('hidden')">Masquer</button>
+    </div>
+    <ul id="cpResults" aria-live="polite">
+      <!-- Rempli par app.js → wirePostalLookup() -->
+    </ul>
+  </section>
+
+  <!-- Leaflet JS -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
 
-  <style>
-    :root {
-      --bg: #0b1020;
-      --panel: #11162a;
-      --muted: #c6c9d1;
-      --brand: #39b77a;
-      --danger: #cc2b4a;
-      --border: #20263d;
-    }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: #e8eaf0;
-      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
-    }
-    header {
-      position: sticky; top: 0; z-index: 1000;
-      background: var(--panel);
-      border-bottom: 1px solid var(--border);
-      padding: .6rem .8rem;
-      display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
-    }
-    header h1 { font-size: 14px; margin: 0; letter-spacing: .2px; color: #fff; }
-    #status { margin-left: auto; color: var(--muted); }
-    main { display: grid; grid-template-columns: 360px 1fr; gap: 10px; padding: 10px; }
-    @media (max-width: 900px){ main { grid-template-columns: 1fr; } }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: .9rem;
-    }
-    .grid { display: grid; gap: .75rem; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-    label { font-size: 12px; color: var(--muted); display: block; margin-bottom: .25rem; }
-    input, select, button {
-      background: #0f1426; color: #e8eaf0;
-      border: 1px solid var(--border); border-radius: 10px;
-      padding: .55rem .65rem; font: inherit;
-    }
-    input:focus, select:focus, button:focus { outline: 1px solid #2a3866; }
-    button.primary { background: #103024; border-color: #1b4f3a; }
-    button.primary:hover { background: #124533; }
-    button.ghost { background: transparent; }
-    button.danger { background: #3a1020; border-color: #5b1830; }
-    button.danger:hover { background: #52152d; }
-    .muted { color: var(--muted); }
-    #map { min-height: 70vh; border-radius: 12px; overflow: hidden; }
-    #error-box {
-      border: 1px solid #5b2431; background: #2a0e17; color: #ffd7df;
-      border-radius: 10px; padding: .6rem .75rem; white-space: pre-wrap; display: none;
-    }
-    .kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: .5rem; }
-    .kpi { background: #0f1426; border: 1px solid var(--border); border-radius: 10px; padding: .6rem; }
-    .kpi b { font-size: 18px; display: block; margin-top: .2rem; }
-    .sep { height: 1px; background: var(--border); margin: .6rem 0; }
-    .small { font-size: 12px; }
-    .pill { display: inline-block; font-size: 11px; border: 1px solid var(--border); border-radius: 999px; padding: .15rem .5rem; color: var(--muted); }
-    .legend { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-    .chip { display: inline-flex; gap: .4rem; align-items: center; background:#0f1426; border:1px solid var(--border); border-radius:999px; padding:.25rem .55rem; }
-    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
-    .dot.prod { background:#f5b841; }
-    .dot.cons { background:#4ea2ff; }
-    .dot.sis { background:#ff6b7a; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>ACC/PMO — Débug</h1>
-    <span id="status" class="muted">Initialisation…</span>
-  </header>
-
-  <main>
-    <section class="card grid" id="leftPanel">
-      <div id="error-box"></div>
-
-      <div class="kpis">
-        <div class="kpi">
-          <span class="muted small">Participants</span>
-          <b id="kpiParticipants">0</b>
-        </div>
-        <div class="kpi">
-          <span class="muted small">Dans D/2</span>
-          <b id="kpiDansD2">0</b>
-        </div>
-        <div class="kpi">
-          <span class="muted small">POI (SIS)</span>
-          <b id="kpiSIS">0</b>
-        </div>
-      </div>
-
-      <div class="legend">
-        <span class="chip"><span class="dot prod"></span> Producteur</span>
-        <span class="chip"><span class="dot cons"></span> Consommateur</span>
-        <span class="chip"><span class="dot sis"></span> SIS</span>
-        <span class="pill" id="communePill">Commune: —</span>
-      </div>
-
-      <div class="sep"></div>
-
-      <div class="row">
-        <div>
-          <label>Latitude centre</label>
-          <input id="lat" type="number" step="0.000001" placeholder="45.191000" />
-        </div>
-        <div>
-          <label>Longitude centre</label>
-          <input id="lon" type="number" step="0.000001" placeholder="5.684000" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>Diamètre (km)</label>
-          <select id="diam">
-            <option value="2">2</option>
-            <option value="5" selected>5</option>
-            <option value="10">10</option>
-            <option value="15">15</option>
-            <option value="20">20</option>
-            <option value="perso">Perso…</option>
-          </select>
-        </div>
-        <div>
-          <label>Diamètre perso (km)</label>
-          <input id="diamPerso" type="number" step="0.1" placeholder="Saisir si Perso" />
-        </div>
-      </div>
-
-      <div class="row">
-        <button id="btnRecentrer">Recentrer carte</button>
-        <button id="btnSIS" class="ghost">Charger POI SIS</button>
-      </div>
-
-      <div class="sep"></div>
-
-      <div class="grid">
-        <div class="row">
-          <div>
-            <label>Importer participants (CSV ; Nom;Lat;Lon;consumer|producer)</label>
-            <input id="fileCsv" type="file" accept=".csv,text/csv" />
-          </div>
-          <div style="display:flex;align-items:end;gap:.5rem;">
-            <button id="btnImportCsv">Importer</button>
-            <button id="btnExportCsv" class="ghost">Exporter</button>
-          </div>
-        </div>
-        <div class="row">
-          <button id="btnSaveLocal" class="primary">Enregistrer (local)</button>
-          <div style="display:flex;gap:.5rem;">
-            <button id="btnLoadLocal">Charger</button>
-            <button id="btnDeleteLocal" class="danger">Supprimer</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="sep"></div>
-
-      <div>
-        <span class="muted small">Astuce :</span>
-        <div class="small muted">
-          - Clique sur la carte pour déplacer le centre<br/>
-          - Le cercle représente <b>D/2</b> (rayon), les marqueurs colorés les participants, et les POI SIS en rose.<br/>
-          - L’onglet Console affiche les détails techniques (F12).
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div id="map"></div>
-    </section>
-  </main>
-
+  <!-- Application -->
+  <script src="app.js"></script>
   <script>
-    /* ---------- Utilitaires ---------- */
-    function setStatus(msg){ document.getElementById('status').textContent = msg; }
-    function showError(msg){
-      const box = document.getElementById('error-box');
-      box.style.display = 'block';
-      box.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-      console.error(msg);
-    }
-    async function fetchJSON(url, { method='GET', body, headers={}, timeoutMs=15000, retries=1, expect='auto' } = {}){
-      const ctrl = new AbortController();
-      const t = setTimeout(()=>ctrl.abort(), timeoutMs);
-      try{
-        const res = await fetch(url, { method, body, headers, signal: ctrl.signal, cache:'no-store' });
-        if(!res.ok){
-          const txt = await res.text().catch(()=> '');
-          throw new Error(`HTTP ${res.status} on ${url} :: ${txt.slice(0,240)}`);
-        }
-        const ct = res.headers.get('content-type')||'';
-        if(expect==='text') return await res.text();
-        if(expect==='json' || ct.includes('application/json')) return await res.json();
-        const raw = await res.text(); try{ return JSON.parse(raw); }catch{ return raw; }
-      }catch(e){
-        if(retries>0){ await new Promise(r=>setTimeout(r, Math.min(2500, timeoutMs/3))); return fetchJSON(url,{method,body,headers,timeoutMs:Math.round(timeoutMs*1.5),retries:retries-1,expect}); }
-        throw e;
-      }finally{ clearTimeout(t); }
-    }
-    const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-    async function overpass(query){
-      try{
-        const body = new URLSearchParams({ data: query }).toString();
-        return await fetchJSON(OVERPASS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body, timeoutMs: 20000, retries: 2, expect: 'json'
-        });
-      }catch(e){ showError(`Overpass KO: ${e.message}`); return null; }
-    }
-    async function getCommuneParCoord(lat, lon){
-      const url = `https://geo.api.gouv.fr/communes?lat=${lat}&lon=${lon}&fields=nom,code,epci&format=json&type=commune`;
-      try{
-        const arr = await fetchJSON(url, { timeoutMs: 10000, retries: 1, expect:'json' });
-        if(!Array.isArray(arr)||arr.length===0) throw new Error('Aucune commune trouvée');
-        return arr[0];
-      }catch(e){ showError(`Commune/EPCI KO: ${e.message}`); return null; }
-    }
-    function haversineMeters(a,b){
-      const R=6371000, toRad=d=>d*Math.PI/180;
-      const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
-      const lat1=toRad(a.lat), lat2=toRad(b.lat);
-      const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
-      return 2*R*Math.asin(Math.sqrt(h));
-    }
-    function pointDansD2(centre, point, diamKm){ const r=(diamKm*1000)/2; return haversineMeters(centre, point) <= r+1; }
-    function parseParticipantsCSV(text){
-      const rows=text.trim().split(/\r?\n/), out=[], errors=[];
-      rows.forEach((line,i)=>{
-        if(!line.trim()) return;
-        const [nom, lat, lon, typeRaw] = line.split(';').map(s=>s?.trim());
-        const type=(typeRaw||'').toLowerCase();
-        if(!nom||!lat||!lon||!['consumer','producer'].includes(type)){ errors.push(`L${i+1}: "${line}"`); return; }
-        const la=Number(lat), lo=Number(lon);
-        if(!Number.isFinite(la)||!Number.isFinite(lo)){ errors.push(`L${i+1}: coords invalides`); return; }
-        out.push({ id: crypto.randomUUID(), nom, lat: la, lon: lo, type });
-      });
-      return { out, errors };
-    }
-    const STORAGE_KEY='echome-acc-project-v1';
-    function saveProject(state){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({__v:1, savedAt:new Date().toISOString(), state})); setStatus('Projet enregistré (local)'); }catch(e){ showError(`Sauvegarde KO: ${e.message}`); } }
-    function loadProject(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw?JSON.parse(raw):null; }catch(e){ showError('Projet corrompu'); return null; } }
-    function deleteProject(){ localStorage.removeItem(STORAGE_KEY); setStatus('Projet supprimé (local)'); }
-
-    /* ---------- État applicatif minimal ---------- */
-    const app = {
-      map: null,
-      centerMarker: null,
-      circle: null,
-      layers: { participants: L.layerGroup(), sis: L.layerGroup() },
-      participants: [],
-      centre: { lat: 45.191, lon: 5.684 }, // Valeur par défaut: Grenoble (à adapter si besoin)
-      diamKm: 5
-    };
-
-    /* ---------- Carte ---------- */
-    function setupMap(){
-      app.map = L.map('map', { zoomControl: true }).setView([app.centre.lat, app.centre.lon], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OSM'
-      }).addTo(app.map);
-      app.layers.participants.addTo(app.map);
-      app.layers.sis.addTo(app.map);
-
-      app.centerMarker = L.marker([app.centre.lat, app.centre.lon], { draggable: true }).addTo(app.map);
-      app.centerMarker.on('dragend', () => {
-        const { lat, lng } = app.centerMarker.getLatLng();
-        app.centre = { lat, lon: lng };
-        document.getElementById('lat').value = lat.toFixed(6);
-        document.getElementById('lon').value = lng.toFixed(6);
-        redrawCircle();
-        refreshComputed();
-      });
-
-      app.map.on('click', (e) => {
-        app.centre = { lat: e.latlng.lat, lon: e.latlng.lng };
-        app.centerMarker.setLatLng([app.centre.lat, app.centre.lon]);
-        document.getElementById('lat').value = app.centre.lat.toFixed(6);
-        document.getElementById('lon').value = app.centre.lon.toFixed(6);
-        redrawCircle();
-        refreshComputed();
-      });
-
-      redrawCircle();
-    }
-    function redrawCircle(){
-      const radius = Math.max(1, (app.diamKm * 1000) / 2);
-      if(app.circle) app.map.removeLayer(app.circle);
-      app.circle = L.circle([app.centre.lat, app.centre.lon], { radius, color:'#39b77a', weight:1, fillOpacity:0.08 }).addTo(app.map);
-    }
-
-    /* ---------- Participants ---------- */
-    function drawParticipants(){
-      app.layers.participants.clearLayers();
-      app.participants.forEach(p=>{
-        const color = p.type === 'producer' ? '#f5b841' : '#4ea2ff';
-        L.circleMarker([p.lat, p.lon], { radius: 6, color, weight: 2, fillOpacity: .7 })
-          .bindPopup(`<b>${p.nom}</b><br>${p.type}<br>${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`)
-          .addTo(app.layers.participants);
-      });
-      document.getElementById('kpiParticipants').textContent = app.participants.length;
-    }
-
-    /* ---------- SIS (Overpass) ---------- */
-    function overpassSISQuery({ lat, lon, diamKm }){
-      const r = Math.max(1, Math.round((diamKm*1000)/2));
-      return `
-        [out:json][timeout:25];
-        (
-          node(around:${r},${lat},${lon})["emergency"="fire_hydrant"];
-          node(around:${r},${lat},${lon})["amenity"="fire_station"];
-          way(around:${r},${lat},${lon})["amenity"="fire_station"];
-          relation(around:${r},${lat},${lon})["amenity"="fire_station"];
-        );
-        out center;
-      `;
-    }
-    async function loadSIS(){
-      setStatus('Chargement SIS…');
-      const q = overpassSISQuery({ lat: app.centre.lat, lon: app.centre.lon, diamKm: app.diamKm });
-      const data = await overpass(q);
-      app.layers.sis.clearLayers();
-      let cnt = 0;
-      if(data && Array.isArray(data.elements)){
-        data.elements.forEach(e=>{
-          const lat = e.lat ?? e.center?.lat;
-          const lon = e.lon ?? e.center?.lon;
-          if(Number.isFinite(lat) && Number.isFinite(lon)){
-            cnt++;
-            L.circleMarker([lat, lon], { radius: 6, color:'#ff6b7a', weight:2, fillOpacity:.7 })
-              .bindPopup(`<b>SIS</b><br>${lat.toFixed(5)}, ${lon.toFixed(5)}`)
-              .addTo(app.layers.sis);
-          }
-        });
-      }
-      document.getElementById('kpiSIS').textContent = cnt;
-      setStatus('Prêt');
-    }
-
-    /* ---------- Calcul & KPI ---------- */
-    function refreshComputed(){
-      // Commune/EPCI
-      getCommuneParCoord(app.centre.lat, app.centre.lon).then(c=>{
-        const pill = document.getElementById('communePill');
-        if(c){ pill.textContent = `Commune: ${c.nom}${c.epci?.nom ? ' — EPCI: '+c.epci.nom : ''}`; }
-      });
-
-      // Dans D/2
-      const d2 = app.participants.filter(p=> pointDansD2(app.centre, {lat:p.lat, lon:p.lon}, app.diamKm)).length;
-      document.getElementById('kpiDansD2').textContent = d2;
-    }
-
-    /* ---------- Export CSV ---------- */
-    function exportCSV(){
-      const rows = [['Nom','Lat','Lon','Type'], ...app.participants.map(p=>[p.nom,p.lat,p.lon,p.type])];
-      const csv = rows.map(r=>r.join(';')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `participants_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }
-
-    /* ---------- Wiring UI ---------- */
-    function wireUI(){
-      const $ = id => document.getElementById(id);
-
-      // Champs centre
-      $('lat').value = app.centre.lat.toFixed(6);
-      $('lon').value = app.centre.lon.toFixed(6);
-      $('lat').addEventListener('change', e => { app.centre.lat = Number(e.target.value)||app.centre.lat; app.centerMarker.setLatLng([app.centre.lat, app.centre.lon]); redrawCircle(); refreshComputed(); });
-      $('lon').addEventListener('change', e => { app.centre.lon = Number(e.target.value)||app.centre.lon; app.centerMarker.setLatLng([app.centre.lat, app.centre.lon]); redrawCircle(); refreshComputed(); });
-
-      // Diamètre
-      function readDiam(){
-        const v = $('diam').value;
-        if(v==='perso'){
-          const d = Number($('diamPerso').value);
-          app.diamKm = Number.isFinite(d) && d>0 ? d : app.diamKm;
-        } else {
-          app.diamKm = Number(v);
-        }
-        redrawCircle(); refreshComputed();
-      }
-      $('diam').addEventListener('change', readDiam);
-      $('diamPerso').addEventListener('change', readDiam);
-
-      // Actions
-      $('btnRecentrer').onclick = ()=>{ app.map.setView([app.centre.lat, app.centre.lon], 13); };
-      $('btnSIS').onclick = loadSIS;
-
-      $('btnImportCsv').onclick = async ()=>{
-        const file = $('fileCsv').files?.[0];
-        if(!file) return showError('Aucun fichier CSV sélectionné');
-        const text = await file.text();
-        const { out, errors } = parseParticipantsCSV(text);
-        if(errors.length){ showError(`${errors.length} erreur(s) d’import:\n- ${errors.join('\n- ')}`); }
-        app.participants = out;
-        drawParticipants(); refreshComputed();
-      };
-      $('btnExportCsv').onclick = exportCSV;
-
-      $('btnSaveLocal').onclick = ()=>{
-        const state = {
-          centre: app.centre,
-          diamKm: app.diamKm,
-          participants: app.participants
-        };
-        saveProject(state);
-      };
-      $('btnLoadLocal').onclick = ()=>{
-        const payload = loadProject();
-        if(!payload) return showError('Aucun projet sauvegardé');
-        const s = payload.state || {};
-        if(s.centre) app.centre = s.centre;
-        if(s.diamKm) app.diamKm = s.diamKm;
-        if(s.participants) app.participants = s.participants;
-        $('lat').value = app.centre.lat.toFixed(6);
-        $('lon').value = app.centre.lon.toFixed(6);
-        $('diam').value = [2,5,10,15,20].includes(Number(app.diamKm)) ? String(app.diamKm) : 'perso';
-        if($('diam').value==='perso') $('diamPerso').value = app.diamKm;
-        app.centerMarker.setLatLng([app.centre.lat, app.centre.lon]);
-        redrawCircle(); drawParticipants(); refreshComputed();
-        setStatus('Projet chargé (local)');
-      };
-      $('btnDeleteLocal').onclick = ()=>{ deleteProject(); };
-    }
-
-    /* ---------- Bootstrap ---------- */
-    (async function init(){
-      try{
-        setStatus('Initialisation…');
-        setupMap();
-        wireUI();
-        drawParticipants();
-        refreshComputed();
-        setStatus('Prêt');
-      }catch(e){
-        showError(`Init KO: ${e.message}`);
-        setStatus('Erreur (voir détails)');
-      }
+    // ouverture par défaut du panneau CP (tu peux masquer au chargement si tu veux)
+    document.getElementById('cpPanel').classList.remove('hidden');
+    // panneau participants : bouton pour réafficher si masqué
+    (function(){
+      const el = document.getElementById('asideParts');
+      if(el) el.classList.remove('hidden');
     })();
   </script>
 </body>
