@@ -1,6 +1,6 @@
 /* ==========================================================
-   Echome ACC – v27.1 Light
-   UI épurée claire + boutons corrigés (clics/gestes)
+   Echome ACC – v27.2 Light
+   Boutons mobile 100% cliquables (click/touch/pointer stopPropagation)
    4 actions : Producteur / Consommateur / Géolocaliser / SDIS
    ACC = SEC (centre libre) • D 2/10/20 • Conformité = pire paire ≤ D
    ========================================================== */
@@ -10,7 +10,6 @@ const $ = id => document.getElementById(id);
 const setStatus = m => { const el=$('status'); if(el) el.textContent=m; };
 const logErr = m => { const e=$('error-box'); if(!e) return; e.classList.remove('hidden'); e.textContent += `[${new Date().toLocaleTimeString()}] ${m}\n`; e.scrollTop=e.scrollHeight; };
 const uid = () => (crypto?.randomUUID?.() || String(Date.now()));
-const isNum = x => Number.isFinite(x);
 
 /* ---------- Géodésie + SEC ---------- */
 function hMeters(a,b){ const R=6371000, rad=d=>d*Math.PI/180, dLat=rad(b.lat-a.lat), dLon=rad(b.lon-a.lon), la1=rad(a.lat), la2=rad(b.lat); const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
@@ -24,11 +23,8 @@ function smallestCircle(pts){ if(!pts.length) return null; const cp=pts.map(p=>(
 
 /* ---------- App state ---------- */
 const app = {
-  map:null,
-  mode:null,                 // 'prod' | 'cons' | null
-  D:2,                       // Diamètre autorisé (km)
-  producer:null,             // {lat, lon}
-  parts:[],                  // participants [{id,nom,lat,lon,type}]
+  map:null, mode:null, D:2,
+  producer:null, parts:[],
   layers:{ group:L.layerGroup(), prod:null, circle:null, worstLine:null, worstLabel:null, sdis:null, sdisOn:false, info:null }
 };
 
@@ -39,55 +35,55 @@ function setupMap(){
   L.control.scale({ position:'topleft', imperial:false, maxWidth:160 }).addTo(app.map);
   app.layers.group.addTo(app.map);
 
-  // Info box
   app.layers.info = L.control({position:'topleft'});
   app.layers.info.onAdd = function(){
     const d=L.DomUtil.create('div','acc-info');
     d.innerHTML = infoHTML(null,null);
-    // évite que la carte capte les clics
     L.DomEvent.disableClickPropagation(d);
     L.DomEvent.disableScrollPropagation(d);
     return d;
   };
   app.layers.info.addTo(app.map);
 
-  // Tap carte selon mode
+  // Carte: réactions au tap selon mode
   app.map.on('click', (e)=>{
-    if(app.mode==='prod'){
-      setProducer(e.latlng.lat, e.latlng.lng);
-      setStatus('Producteur défini / déplacé');
-    }else if(app.mode==='cons'){
-      addConsumer(e.latlng.lat, e.latlng.lng, `Consommateur ${app.parts.length+1}`);
-      setStatus('Consommateur ajouté');
-    }
+    if(app.mode==='prod'){ setProducer(e.latlng.lat, e.latlng.lng); setStatus('Producteur défini / déplacé'); }
+    else if(app.mode==='cons'){ addConsumer(e.latlng.lat, e.latlng.lng, `Consommateur ${app.parts.length+1}`); setStatus('Consommateur ajouté'); }
   });
 
-  // Long-press carte => ajouter consommateur
   enableLongPressToAdd();
-
   redrawAll();
 }
 
 function infoHTML(maxPair, ok){
-  const r = (app.D/2);
-  const badge = ok==null?'—':(ok?'✅ Conforme':'⚠️ Hors limite');
+  const r = (app.D/2), badge = ok==null?'—':(ok?'✅ Conforme':'⚠️ Hors limite');
   const dMax = (maxPair==null)?'—':`${maxPair.toFixed(2)} km`;
   return `<b>ACC</b> • D <b>${app.D} km</b> (R ${r} km) • max paire <b>${dMax}</b> • ${badge}`;
 }
 
-/* ---------- Actions UI (boutons) ---------- */
+/* ---------- Bouclier UI (anti-capture) ---------- */
 function shieldUI(){
-  const top = document.querySelector('.topbar');
-  const dock = document.querySelector('.dock');
-  [top, dock].forEach(el=>{
+  const shield = (el)=>{
     if(!el) return;
+    // Empêche Leaflet d'intercepter
     L.DomEvent.disableClickPropagation(el);
     L.DomEvent.disableScrollPropagation(el);
-    el.addEventListener('click', e=>{ e.stopPropagation(); }, { passive:false });
-    el.addEventListener('touchstart', e=>{ e.stopPropagation(); }, { passive:false });
-  });
+    const stop = e=>{ e.preventDefault(); e.stopPropagation(); };
+    ['click','pointerdown','pointerup','pointercancel','touchstart','touchend','touchmove'].forEach(ev=>{
+      el.addEventListener(ev, stop, { passive:false });
+    });
+    // Pour chaque bouton
+    el.querySelectorAll('button').forEach(b=>{
+      ['click','pointerdown','pointerup','pointercancel','touchstart','touchend','touchmove'].forEach(ev=>{
+        b.addEventListener(ev, stop, { passive:false });
+      });
+    });
+  };
+  shield(document.querySelector('.topbar'));
+  shield(document.querySelector('.dock'));
 }
 
+/* ---------- Actions UI ---------- */
 function wireDock(){
   const bProd=$('btnProd'), bCons=$('btnCons'), bGeo=$('btnGeo'), bSDIS=$('btnSDIS');
   const chips=$('chipDiameter');
@@ -99,36 +95,18 @@ function wireDock(){
     setStatus(app.mode===null?'Navigation':(app.mode==='prod'?'Mode Producteur':'Mode Consommateur'));
   };
 
-  if(bProd){
-    bProd.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setMode('prod'); }, { passive:false });
-    bProd.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
-  }
-  if(bCons){
-    bCons.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setMode('cons'); }, { passive:false });
-    bCons.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
-  }
-  if(bGeo){
-    bGeo.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); geolocate(); }, { passive:false });
-    bGeo.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
-  }
-  if(bSDIS){
-    bSDIS.addEventListener('click', async (e)=>{
-      e.preventDefault(); e.stopPropagation();
-      const on = !app.layers.sdisOn;
-      await toggleSDIS(on);
-      bSDIS.setAttribute('aria-pressed', on?'true':'false');
-    }, { passive:false });
-    bSDIS.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
-  }
+  if(bProd) bProd.onclick = ()=> setMode('prod');
+  if(bCons) bCons.onclick = ()=> setMode('cons');
+  if(bGeo)  bGeo.onclick  = geolocate;
+  if(bSDIS) bSDIS.onclick = async ()=>{
+    const on = !app.layers.sdisOn;
+    await toggleSDIS(on);
+    bSDIS.setAttribute('aria-pressed', on?'true':'false');
+  };
 
-  // Chips diamètre
   if(chips){
-    L.DomEvent.disableClickPropagation(chips);
-    L.DomEvent.disableScrollPropagation(chips);
     chips.addEventListener('click', (e)=>{
-      e.preventDefault(); e.stopPropagation();
-      const btn = e.target.closest('.chip[data-d]');
-      if(!btn) return;
+      const btn = e.target.closest('.chip[data-d]'); if(!btn) return;
       const D = Number(btn.getAttribute('data-d'))||2;
       app.D = D;
       chips.querySelectorAll('.chip').forEach(c=>{
@@ -138,10 +116,9 @@ function wireDock(){
       });
       recompute();
       setStatus(`Diamètre = ${D} km`);
-    }, { passive:false });
+    });
   }
 
-  // Mode par défaut : navigation
   app.mode = null;
 }
 
@@ -154,14 +131,12 @@ function setProducer(lat, lon){
       icon:L.divIcon({className:'picon', html:'<div style="width:18px;height:18px;border-radius:50%;background:#ffd24a;border:2px solid #c9a300"></div>', iconSize:[20,20], iconAnchor:[10,20]})
     }).addTo(app.map);
 
-    // drag -> recalc
     app.layers.prod.on('dragend', ()=>{
       const { lat:la, lng:lo } = app.layers.prod.getLatLng();
       setProducer(la, lo);
       setStatus('Producteur déplacé');
     });
 
-    // long-press / dbl / contextmenu -> supprimer
     let t=null,pressed=false;
     app.layers.prod.on('touchstart',()=>{ pressed=true; t=setTimeout(()=>{ if(!pressed) return; if(confirm('Supprimer le producteur ?')){ clearProducer(); } },650); });
     app.layers.prod.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
@@ -185,7 +160,6 @@ function addConsumer(lat, lon, nom){
   const m=L.circleMarker([lat,lon],{ radius:6, color:'#2d6aff', weight:2, fillOpacity:.85 })
     .addTo(app.layers.group);
 
-  // popup + suppression
   const html = `<b>${nom}</b><br>${lat.toFixed(5)}, ${lon.toFixed(5)}<br>
     <div style="margin-top:6px;display:flex;gap:6px">
       <button id="c-${p.id}" class="btn">Centrer</button>
@@ -198,7 +172,6 @@ function addConsumer(lat, lon, nom){
     if(bD) bD.onclick=()=>{ m.closePopup(); removeConsumer(p.id, m); };
   });
 
-  // long-press direct pour supprim
   let t=null, pressed=false;
   m.on('touchstart', ()=>{ pressed=true; t=setTimeout(()=>{ if(!pressed) return; if(confirm(`Supprimer "${nom}" ?`)) removeConsumer(p.id, m); },650); });
   m.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
@@ -234,9 +207,8 @@ function enableLongPressToAdd(){
 
 /* ---------- Compliance + cercle ACC (centre libre) ---------- */
 function recompute(){
-  // Nettoie overlays participants
   app.layers.group.clearLayers();
-  // Redessine participants
+
   app.parts.forEach(p=>{
     const m=L.circleMarker([p.lat,p.lon],{ radius:6, color:'#2d6aff', weight:2, fillOpacity:.85 }).addTo(app.layers.group);
     const html = `<b>${p.nom}</b><br>${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}<br>
@@ -255,7 +227,6 @@ function recompute(){
     m.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
   });
 
-  // Producteur
   if(app.producer){
     if(!app.layers.prod){
       app.layers.prod = L.marker([app.producer.lat,app.producer.lon],{
@@ -267,10 +238,8 @@ function recompute(){
     }
   }
 
-  // Points pour calcul
   const pts=[]; if(app.producer) pts.push(app.producer); app.parts.forEach(p=>pts.push({lat:p.lat,lon:p.lon}));
 
-  // Pire paire & SEC
   const worst = worstPair(pts);
   const ok = worst ? (worst.d <= app.D) : null;
   drawWorst(worst);
@@ -323,11 +292,7 @@ function setInfo(maxPair, ok){
 function geolocate(){
   if(!navigator.geolocation){ setStatus("Géolocalisation indisponible"); return; }
   navigator.geolocation.getCurrentPosition(
-    (pos)=>{
-      const { latitude, longitude } = pos.coords;
-      app.map.setView([latitude, longitude], 15);
-      setStatus('Position localisée');
-    },
+    (pos)=>{ const { latitude, longitude } = pos.coords; app.map.setView([latitude, longitude], 15); setStatus('Position localisée'); },
     (err)=>{ logErr(`Géoloc KO: ${err.message}`); setStatus('Géoloc KO'); },
     { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
   );
@@ -374,7 +339,7 @@ async function toggleSDIS(on){
 /* ---------- Init ---------- */
 (function init(){
   setupMap();
-  shieldUI();
+  shieldUI();        // <<< anti-capture Leaflet sur topbar/dock
   wireDock();
 
   // Sync chips init
@@ -383,7 +348,6 @@ async function toggleSDIS(on){
     c.classList.toggle('active', on); c.setAttribute('aria-pressed', on?'true':'false');
   });
 
-  // Cercle initial (même sans points)
   recompute();
   setStatus('Prêt');
 })();
