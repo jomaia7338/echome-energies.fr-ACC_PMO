@@ -12,12 +12,19 @@
 <body>
   <header class="topbar">
     <div class="brand">Echome ACC</div>
+
     <div class="chips" id="chipDiameter" aria-label="Diamètre ACC">
       <button class="chip active" data-d="2" aria-pressed="true">2 km</button>
       <button class="chip" data-d="10">10 km</button>
       <button class="chip" data-d="20">20 km</button>
     </div>
-    <div class="status"><span id="status">Prêt</span> <span id="badge" class="badge">—</span></div>
+
+    <div class="status">
+      <div id="status-indicateur" class="status-box status-warning">
+        <span id="status-text">Prêt — Mise à jour en cours</span>
+      </div>
+      <span id="badge" class="badge">—</span>
+    </div>
   </header>
 
   <main class="stage">
