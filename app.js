@@ -1,14 +1,12 @@
 /* ==========================================================
-   Echome Énergies – ACC terrain (v25)
-   - One-hand mobile UX (onglets)
-   - Modes Producteur / Consommateur
-   - Long-press producteur = supprimer | drag = déplacer
-   - Long-press carte = ajouter consommateur
-   - Zone ACC = cercle (diamètre 2/10/20) centre non défini (SEC)
+   Echome Énergies – ACC terrain (v26)
+   - Mobile terrain (boutons flottants Pan/Prod/Cons, +, ⤢)
+   - Producteur / Consommateur (tap), long-press carte (ajout)
+   - Zone ACC = SEC (centre libre) avec D 2/10/20
    - Conformité = pire paire ≤ D
-   - Auto-commune (reverse geo.api.gouv.fr) + JSON typologie INSEE local
-   - CP -> communes (jeu local)
-   - SDIS/SIS (GeoJSON local), géométries mixtes tolérées
+   - Auto-commune (reverse geo.api.gouv.fr) + JSON typologie locale
+   - Recherche CP → communes (jeu local)
+   - SDIS/SIS (GeoJSON local) robuste (géométries mixtes)
    - fitToProject défensif
    ========================================================== */
 
@@ -32,9 +30,9 @@ function secWelzl(P,R=[]){ if(P.length===0||R.length===3){ if(R.length===0) retu
 function smallestEnclosingCircle(points){ if(points.length===0) return null; const copy=points.map(p=>({lat:p.lat,lon:p.lon})); shuffle(copy); return secWelzl(copy,[]); }
 
 /* ===== State ===== */
-const STORAGE_NS='echome-acc-autonome-v25', STORAGE_LAST=`${STORAGE_NS}:lastProjectId`, projectKey=id=>`${STORAGE_NS}:project:${id}`;
+const STORAGE_NS='echome-acc-autonome-v26', STORAGE_LAST=`${STORAGE_NS}:lastProjectId`, projectKey=id=>`${STORAGE_NS}:project:${id}`;
 const app = {
-  __BUILD__:'2025-10-25', map:null, projectId:null,
+  __BUILD__:'2025-10-25 v26', map:null, projectId:null,
   distMaxKm:2, producteur:null, participants:[], mode:null,
   layers:{ producer:null, parts:L.layerGroup(), worstLine:null, worstLabel:null, accCircle:null, infoCtrl:null, sdisLayer:null, sdisOn:false },
   secCenter:null, secRadiusKm:0, _didFitOnce:false
@@ -115,9 +113,7 @@ function enableLongPressAddOnMap(){
   },{passive:true});
   app.map.on('touchmove',e=>{ const t1=e.touches?.[0]; if(!t1||!startPt) return; if(Math.hypot(t1.clientX-startPt.x,t1.clientY-startPt.y)>12){ started=false; if(t) clearTimeout(t); } },{passive:true});
   app.map.on('touchend',()=>{ started=false; if(t) clearTimeout(t); });
-}
-
-/* ===== Producteur & participants ===== */
+}/* ===== Producteur & participants ===== */
 function setProducer({lat,lon},opts={}){
   if(!isValidLatLon(lat,lon)) return showError('Coordonnées producteur invalides');
   app.producteur={lat,lon};
@@ -233,9 +229,7 @@ async function toggleSDIS(on){
   app.layers.sdisOn=on;
   if(on){ const ok=await ensureSdisLayerLoaded(); if(ok) app.layers.sdisLayer.addTo(app.map); setStatus('SDIS/SIS affichés'); }
   else{ if(app.layers.sdisLayer) app.map.removeLayer(app.layers.sdisLayer); setStatus('SDIS/SIS masqués'); }
-}
-
-/* ===== Modes & chips ===== */
+}/* ===== Modes & chips ===== */
 function setDiameter(d){
   const D=Number(d)||2; app.distMaxKm=D;
   const wrap=$('chipDiameter'); if(wrap){ wrap.querySelectorAll('.chip').forEach(b=>{ const on=Number(b.getAttribute('data-d'))===D; b.classList.toggle('active',on); b.setAttribute('aria-pressed',on?'true':'false'); }); }
@@ -247,18 +241,42 @@ function wireDiameterChips(){
   setDiameter(app.distMaxKm);
 }
 function wireModeButtons(){
-  const bProd=$('btnModeProducer'), bCons=$('btnModeConsumer'), bSdis=$('btnToggleSDIS'), bList=$('btnToggleList'), bHide=$('btnHideList'), aside=$('asideParts');
-  const sync=()=>{ if(bProd) bProd.classList.toggle('active', app.mode==='producer'); if(bCons) bCons.classList.toggle('active', app.mode==='consumer'); };
-  if(bProd) bProd.onclick=()=>{ app.mode='producer'; setStatus('Mode Producteur (tap = poser/déplacer)'); sync(); };
-  if(bCons) bCons.onclick=()=>{ app.mode='consumer'; setStatus('Mode Consommateur (tap = poser)'); sync(); };
+  // v26 : modes pilotés surtout par les FAB (Pan/Prod/Cons)
+  const bSdis=$('btnToggleSDIS'), bList=$('btnToggleList');
+  const aside=null; // pas d’aside dans v26 (sécurité)
   if(bSdis) bSdis.onclick=async()=>{ const on=!app.layers.sdisOn; await toggleSDIS(on); bSdis.setAttribute('aria-pressed',on?'true':'false'); bSdis.classList.toggle('active',on); };
-  if(bList) bList.onclick=()=>{ aside?.classList.toggle('hidden'); };
-  if(bHide) bHide.onclick=()=>{ aside?.classList.add('hidden'); };
-  app.mode=null; sync();
+  if(bList) bList.onclick=()=>{ /* placeholder liste participants (future itération) */ alert(`Participants: ${app.participants.length}`); };
+  // mode par défaut : navigation
+  app.mode=null;
+}
+
+/* ===== FAB terrain (Pan/Prod/Cons, +, ⤢) ===== */
+function centerOnProject(){
+  try{ fitToProject(); setStatus('Recentré sur le projet'); }
+  catch(e){ showError('Recentrage impossible'); }
+}
+function addConsumerAtViewCenter(){
+  const c = app.map.getCenter();
+  const ll = { lat: c.lat, lon: c.lng };
+  addParticipant({ id: newId(), nom: `Consommateur ${app.participants.length+1}`, ...ll, type:'consumer' });
+  setStatus('Consommateur ajouté (centre écran)');
+}
+function cycleMode(){
+  // null -> producer -> consumer -> null
+  const order = [null, 'producer', 'consumer'];
+  const idx = order.indexOf(app.mode);
+  const next = order[(idx+1) % order.length];
+  app.mode = next;
+  const b = document.getElementById('fabMode');
+  if(b){
+    b.textContent = next===null ? 'Pan' : (next==='producer' ? 'Prod' : 'Cons');
+    b.classList.toggle('primary', next!==null);
+  }
+  setStatus(next===null ? 'Mode navigation' : (next==='producer'?'Mode Producteur':'Mode Consommateur'));
 }
 
 /* ===== Persistence ===== */
-function getPayload(){ return {__v:10,savedAt:new Date().toISOString(),state:{distMaxKm:app.distMaxKm,producteur:app.producteur,participants:app.participants}}; }
+function getPayload(){ return {__v:11,savedAt:new Date().toISOString(),state:{distMaxKm:app.distMaxKm,producteur:app.producteur,participants:app.participants}}; }
 function saveProject(){ try{ if(!app.projectId) app.projectId=newId(); localStorage.setItem(projectKey(app.projectId), JSON.stringify(getPayload())); localStorage.setItem(STORAGE_LAST, app.projectId); const url=new URL(location.href); url.searchParams.set('project',app.projectId); history.replaceState(null,'',url.toString()); }catch(e){ showError(`Sauvegarde KO: ${e.message}`); } }
 function loadProjectById(id){ try{ const raw=localStorage.getItem(projectKey(id)); return raw?JSON.parse(raw):null; }catch(e){ showError('Projet corrompu'); return null; } }
 function applyPayload(p){ const s=p?.state||{}; app.distMaxKm=s.distMaxKm??2; app.producteur=s.producteur||null; app.participants=Array.isArray(s.participants)?s.participants:[]; const wrap=$('chipDiameter'); if(wrap){ wrap.querySelectorAll('.chip').forEach(b=>{ const d=Number(b.getAttribute('data-d')); const on=d===app.distMaxKm; b.classList.toggle('active',on); b.setAttribute('aria-pressed',on?'true':'false'); }); } afterModelChange(); }
@@ -271,14 +289,33 @@ function onProjectChanged(){ updateCompliance(); saveProject(); }
 (async function init(){
   try{
     setStatus('Initialisation…'); setupMap();
-    // données locales
+
+    // Données locales
     const [typo,cpIndex]=await Promise.all([loadLocalJSON(PATH_TYPO), loadLocalJSON(PATH_CP)]);
     if(typo) INSEE_TYPO=typo; else console.warn('INSEE_TYPO manquant (data/insee_typo_2025.json)');
     if(cpIndex) CP_INDEX=cpIndex; else console.warn('CP_INDEX manquant (data/cp_communes_index.json)');
+
     updateCompliance(); // cercle initial
+
+    // UI
     wireModeButtons(); wireDiameterChips(); wirePostalLookup();
+
+    // FAB terrain
+    (function wireFAB(){
+      const fMode = $('fabMode');
+      const fAdd  = $('fabPlus');
+      const fCtr  = $('fabCenter');
+      if(fMode) fMode.onclick = cycleMode;
+      if(fAdd)  fAdd.onclick  = addConsumerAtViewCenter;
+      if(fCtr)  fCtr.onclick  = centerOnProject;
+      if(fMode){ fMode.textContent='Pan'; fMode.classList.remove('primary'); }
+    })();
+
+    // Restore projet si présent
     const fromUrl=new URLSearchParams(location.search).get('project') || localStorage.getItem(STORAGE_LAST);
     if(fromUrl){ const payload=loadProjectById(fromUrl); if(payload){ app.projectId=fromUrl; applyPayload(payload); setStatus('Projet chargé'); return; } }
     app.projectId=newId(); saveProject(); setStatus('Prêt');
-  }catch(e){ showError(`Init KO: ${e.message}`); setStatus('Erreur (voir détails)'); }
+  }catch(e){
+    showError(`Init KO: ${e.message}`); setStatus('Erreur (voir détails)');
+  }
 })();
