@@ -1,72 +1,38 @@
 <!doctype html>
 <html lang="fr">
->
 <head>
   <meta charset="utf-8" />
-  <title>Echome Énergies — ACC terrain</title>
+  <title>Echome ACC – Terrain (v27)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1426">
+  <meta name="theme-color" content="#0d1224">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
   <header class="topbar">
-    <div class="brand">Echome Énergies — ACC</div>
-    <div class="status-line">
-      <span id="status">Initialisation…</span>
-      <span class="badge" id="badgeCompliance">—</span>
+    <div class="brand">Echome ACC</div>
+    <div class="chips" id="chipDiameter" aria-label="Diamètre ACC">
+      <button class="chip active" data-d="2" aria-pressed="true">2 km</button>
+      <button class="chip" data-d="10">10 km</button>
+      <button class="chip" data-d="20">20 km</button>
     </div>
+    <div class="status"><span id="status">Prêt</span> <span id="badge" class="badge">—</span></div>
   </header>
 
-  <main class="map-stage">
-    <div id="map" class="map"></div>
-
-    <!-- Boutons flottants (terrain) -->
-    <div class="fab-col" aria-label="Actions rapides">
-      <button class="fab-btn primary" id="fabMode" title="Basculer Pan / Producteur / Consommateur">Pan</button>
-      <button class="fab-btn" id="fabPlus" title="Ajout rapide consommateur">+</button>
-      <button class="fab-btn ghost" id="fabCenter" title="Recentrer le projet">⤢</button>
-    </div>
+  <main class="stage">
+    <div id="map" class="map" aria-label="Carte"></div>
   </main>
 
-  <nav class="btmbar">
-    <div class="tabs" id="tabs">
-      <button class="tab active" data-panel="panel-actions" aria-pressed="true">Actions</button>
-      <button class="tab" data-panel="panel-commune" aria-pressed="false">Commune</button>
-      <button class="tab" data-panel="panel-couches" aria-pressed="false">Couches</button>
-    </div>
-
-    <section class="panel active" id="panel-actions">
-      <div class="row">
-        <div class="chips" id="chipDiameter">
-          <button class="chip active" data-d="2" aria-pressed="true">D 2 km</button>
-          <button class="chip" data-d="10">D 10 km</button>
-          <button class="chip" data-d="20">D 20 km</button>
-        </div>
-      </div>
-      <div class="row">
-        <button class="btn" id="btnToggleList">Liste</button>
-      </div>
-    </section>
-
-    <section class="panel" id="panel-commune">
-      <div class="row">
-        <input type="text" id="cpInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="Code postal" />
-        <button class="btn" id="btnSearchCP">Chercher</button>
-      </div>
-      <ul id="cpResults"></ul>
-    </section>
-
-    <section class="panel" id="panel-couches">
-      <div class="row">
-        <button class="chip" id="btnToggleSDIS" aria-pressed="false">SDIS / SIS</button>
-      </div>
-    </section>
+  <!-- Barre terrain : 4 actions -->
+  <nav class="dock" aria-label="Actions">
+    <button id="btnProd" class="dock-btn" aria-pressed="false">Producteur</button>
+    <button id="btnCons" class="dock-btn" aria-pressed="false">Consommateur</button>
+    <button id="btnGeo"  class="dock-btn">Géolocaliser</button>
+    <button id="btnSDIS" class="dock-btn" aria-pressed="false">SDIS / SIS</button>
   </nav>
 
-  <pre id="error-box" class="hidden"></pre>
+  <pre id="error-box" class="errors hidden" aria-live="polite"></pre>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
