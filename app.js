@@ -1,9 +1,8 @@
 /* ==========================================================
-   Echome Énergies – ACC terrain (autonome, GitHub Pages)
-   - Modes : Producteur | Consommateur | SDIS/SIS ON/OFF
-   - Densité INSEE & CP via fichiers locaux (data/*.json)
-   - Zone ACC : diamètre 2/10/20 (centre libre = SEC)
-   - Conformité : pire paire ≤ D
+   Echome Énergies – ACC terrain (v22)
+   Correctifs: lat/lon vs lat/lng, auto-D via INSEE (reverse),
+   modes explicites, long-press producteur -> supprimer,
+   SDIS local (toggle)
    ========================================================== */
 
 // =============== Helpers ===============
@@ -19,7 +18,15 @@ const showError = (m) => {
 const newId = () => (crypto?.randomUUID?.() || String(Date.now()));
 const isFiniteNum = (x)=>Number.isFinite(x);
 
-function latlngString(ll){ return `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`; }
+// Normalise n’importe quel objet {lat, lon|lng} en {lat, lon}
+function toLatLon(obj){
+  if(!obj) return null;
+  const lat = Number(obj.lat);
+  const lon = Number(obj.lon ?? obj.lng);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+function latlngStringLL(ll){ return `${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}`; }
 
 // =============== Géodésie ===============
 function haversineMeters(a,b){
@@ -69,7 +76,7 @@ function smallestEnclosingCircle(points){
 }
 
 // =============== App state ===============
-const STORAGE_NS = 'echome-acc-autonome-v21';
+const STORAGE_NS = 'echome-acc-autonome-v22';
 const STORAGE_LAST = `${STORAGE_NS}:lastProjectId`;
 const projectKey = (id) => `${STORAGE_NS}:project:${id}`;
 
@@ -78,15 +85,12 @@ const app = {
   map:null,
   projectId:null,
 
-  // Métier
   distMaxKm: 2,             // Diamètre 2 | 10 | 20 km (rayon D/2)
   producteur: null,         // {lat, lon}
   participants: [],         // [{id, nom, lat, lon, type}]
 
-  // Modes
   mode: null,               // 'producer' | 'consumer' | null
 
-  // Overlays
   layers:{
     producer: null,
     parts: L.layerGroup(),
@@ -94,19 +98,16 @@ const app = {
     accCircle: null,
     infoCtrl: null,
 
-    // SDIS/SIS
     sdisLayer: null,
     sdisOn: false
   },
 
-  // SEC cache
   secCenter: null,          // {lat, lon}
   secRadiusKm: 0,
-
   _didFitOnce:false
 };
 
-// =============== Fichiers locaux (autonomie) ===============
+// =============== Données locales ===============
 let INSEE_TYPO = {};          // { INSEE: "urbaine" | "périurbaine" | "rurale" }
 let CP_INDEX = {};            // { "38000":[{code, nom, lat, lon}, ...], ... }
 const PATH_TYPO = 'data/insee_typo_2025.json';
@@ -123,6 +124,41 @@ async function loadLocalJSON(url){
   }
 }
 
+// =============== INSEE reverse by point (autonome + API publique) ===============
+async function fetchCommuneByPoint(lat, lon){
+  // API publique gratuite, renvoie la commune à partir du point
+  const url = `https://geo.api.gouv.fr/communes?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&fields=nom,code,centre,codeDepartement&format=json`;
+  try{
+    const r = await fetch(url, { cache:'no-store' });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const arr = await r.json();
+    return Array.isArray(arr) && arr[0] ? arr[0] : null;
+  }catch(e){
+    console.warn('Reverse commune KO', e); return null;
+  }
+}
+function diameterFromTypology(typologie){
+  const t=(typologie||'').toLowerCase();
+  if(t.includes('urbain')) return 2;
+  if(t.includes('péri') || t.includes('peri')) return 10;
+  if(t.includes('rural')) return 20;
+  return null;
+}
+function setDiameterFromInsee(codeInsee, communeName){
+  const ty = INSEE_TYPO[codeInsee] || null;
+  const D = diameterFromTypology(ty);
+  if(D){
+    app.distMaxKm=D; updateCompliance(); saveProject();
+    document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
+      const d=Number(b.getAttribute('data-d')); const active=d===app.distMaxKm;
+      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
+    });
+    setStatus(`Commune: ${communeName||codeInsee} • Typologie: ${ty} • Diamètre = ${D} km`);
+  }else{
+    setStatus(`Typologie inconnue pour ${communeName||codeInsee}. Choisis 2/10/20 km.`);
+  }
+}
+
 // =============== Map setup ===============
 function setupMap(){
   app.map = L.map('map', { zoomControl:true }).setView([45.191, 5.684], 12);
@@ -132,10 +168,10 @@ function setupMap(){
   L.control.scale({ position:'topleft', imperial:false, maxWidth:160 }).addTo(app.map);
   app.layers.parts.addTo(app.map);
 
-  // Tap = action du mode courant
+  // Tap selon mode courant
   app.map.on('click', (e)=>{
     if(app.mode === 'producer' || (!app.producteur && app.mode===null)){
-      setProducer({ lat:e.latlng.lat, lon:e.latlng.lng });
+      setProducer({ lat:e.latlng.lat, lon:e.latlng.lng }, { autoCommune:true });
       setStatus('Producteur défini'); return;
     }
     if(app.mode === 'consumer'){
@@ -198,22 +234,53 @@ function enableLongPressAddOnMap(){
 }
 
 // =============== Producteur & participants ===============
-function setProducer({lat, lon}){
+function setProducer({lat, lon}, opts={}){
   if(!isValidLatLon(lat,lon)) return showError('Coordonnées producteur invalides');
   app.producteur = { lat, lon };
+
   if(!app.layers.producer){
     app.layers.producer = L.marker([lat,lon],{
       draggable:true,
       title:'Producteur',
       icon: L.divIcon({ className:'prod-icon', html:'<div class="pin" style="width:18px;height:18px;border-radius:50%;background:#f5b841;border:2px solid #b58900"></div>', iconSize:[20,20], iconAnchor:[10,20] })
     }).addTo(app.map);
+
+    // Drag = repositionner
     app.layers.producer.on('dragend', ()=>{
       const { lat:la, lng:lo } = app.layers.producer.getLatLng();
-      setProducer({ lat:la, lon:lo });
+      setProducer({ lat:la, lon:lo }, { autoCommune:true });
     });
+
+    // Appui long = supprimer producteur
+    let t=null, pressed=false;
+    app.layers.producer.on('touchstart', ()=>{
+      pressed=true;
+      t=setTimeout(()=>{
+        if(!pressed) return;
+        if(confirm('Supprimer le producteur ?')){
+          clearProducer();
+          setStatus('Producteur supprimé');
+        }
+      }, 650);
+    });
+    app.layers.producer.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
   }else{
     app.layers.producer.setLatLng([lat,lon]);
   }
+
+  afterModelChange();
+
+  // Auto commune -> auto diamètre (INSEE_TYPO)
+  if(opts.autoCommune){
+    (async ()=>{
+      const c = await fetchCommuneByPoint(lat, lon);
+      if(c?.code){ setDiameterFromInsee(c.code, c.nom); }
+    })();
+  }
+}
+function clearProducer(){
+  app.producteur = null;
+  if(app.layers.producer){ app.map.removeLayer(app.layers.producer); app.layers.producer = null; }
   afterModelChange();
 }
 
@@ -234,8 +301,8 @@ function bindMarkerUI(marker, p){
   marker.on('popupopen', ()=>{
     const bDel = document.getElementById(`del-${p.id}`);
     const bCtr = document.getElementById(`center-${p.id}`);
-    if(bDel) bDel.onclick = ()=>{ marker.closePopup(); removeParticipant(p.id); setStatus('Participant supprimé'); };
-    if(bCtr) bCtr.onclick = ()=>{ marker.closePopup(); app.map.setView([p.lat,p.lon], Math.max(14, app.map.getZoom())); };
+    if(bDel) bDel.onclick = ()=> { marker.closePopup(); removeParticipant(p.id); setStatus('Participant supprimé'); };
+    if(bCtr) bCtr.onclick = ()=> { marker.closePopup(); app.map.setView([p.lat,p.lon], Math.max(14, app.map.getZoom())); };
   });
   let t=null, pressed=false;
   marker.on('touchstart', ()=>{ pressed=true; t=setTimeout(()=>{ if(!pressed) return;
@@ -284,15 +351,17 @@ function drawWorstOverlay(w, D){
   const mid={lat:(w.a.lat+w.b.lat)/2, lon:(w.a.lon+w.b.lon)/2};
   app.layers.worstLabel = L.marker([mid.lat, mid.lon],{ icon:L.divIcon({ className:'maxpair-label', html:`${w.d.toFixed(2)} km / ≤ ${D} km` }) }).addTo(app.map);
 }
-function drawAccCircle(center, ok){
+function drawAccCircle(centerLike, ok){
+  const c = toLatLon(centerLike);
+  if(!c){ console.warn('Centre invalide pour cercle ACC'); return; }
   const rMeters = (app.distMaxKm/2)*1000;
   const color = ok?'#2ecc71':'#e67e22';
   if(!app.layers.accCircle){
-    app.layers.accCircle = L.circle([center.lat,center.lon],{
+    app.layers.accCircle = L.circle([c.lat,c.lon],{
       radius:rMeters, color, weight:3, opacity:1, fillOpacity:.06, fillColor:color, dashArray:'8,6'
     }).addTo(app.map);
   }else{
-    app.layers.accCircle.setLatLng([center.lat,center.lon]);
+    app.layers.accCircle.setLatLng([c.lat,c.lon]);
     app.layers.accCircle.setRadius(rMeters);
     app.layers.accCircle.setStyle({ color, fillColor:color });
   }
@@ -313,9 +382,10 @@ function updateCompliance(){
   if(pts.length>=2){ worst=worstPair(pts); ok = worst.d <= app.distMaxKm; drawWorstOverlay(worst, app.distMaxKm); }
   else { clearWorstOverlay(); }
 
-  const center = app.secCenter || (app.producteur ? app.producteur : app.map.getCenter());
+  const fallbackCenter = toLatLon(app.producteur) || toLatLon(app.map.getCenter());
+  const centerLike = app.secCenter || fallbackCenter;
   const okBySEC = (app.secRadiusKm*2) <= app.distMaxKm; // diamètre SEC ≤ D
-  drawAccCircle(center, okBySEC);
+  drawAccCircle(centerLike, okBySEC);
 
   refreshInfoBox(worst?.d ?? null, ok);
 
@@ -334,28 +404,7 @@ function fitToProject(){
   if(b.isValid()) app.map.fitBounds(b.pad(0.25),{ maxZoom:15 });
 }
 
-// =============== Densité INSEE & CP (local) ===============
-function diameterFromTypology(typologie){
-  const t=(typologie||'').toLowerCase();
-  if(t.includes('urbain')) return 2;
-  if(t.includes('péri') || t.includes('peri')) return 10;
-  if(t.includes('rural')) return 20;
-  return null;
-}
-function setDiameterFromInsee(codeInsee){
-  const ty = INSEE_TYPO[codeInsee] || null;
-  const D = diameterFromTypology(ty);
-  if(D){
-    app.distMaxKm=D; updateCompliance(); saveProject();
-    document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
-      const d=Number(b.getAttribute('data-d')); const active=d===app.distMaxKm;
-      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
-    });
-    setStatus(`Diamètre (INSEE ${codeInsee}, ${ty}) = ${D} km`);
-  }else{
-    setStatus(`Typologie inconnue pour ${codeInsee}. Choisis 2/10/20 km.`);
-  }
-}
+// =============== CP -> communes (jeu local) ===============
 function wirePostalLookup(){
   const input=$('cpInput'), btn=$('btnSearchCP'), list=$('cpResults');
   if(!input||!btn||!list) return;
@@ -367,11 +416,11 @@ function wirePostalLookup(){
     list.innerHTML='';
     communes.forEach(c=>{
       const li=document.createElement('li'); li.className='cp-item';
-      li.style.cssText='padding:8px 10px;border-bottom:1px solid #20263d;cursor:pointer';
+      li.style.cssText='padding:8px 10px;border:1px solid #20263d;border-radius:10px;margin-bottom:6px;cursor:pointer;background:#141a31';
       li.textContent=`${c.nom} — INSEE ${c.code}`;
       li.onclick=()=>{
         if(isFiniteNum(c.lat)&&isFiniteNum(c.lon)) app.map.setView([c.lat,c.lon], Math.max(12, app.map.getZoom()));
-        setDiameterFromInsee(c.code);
+        setDiameterFromInsee(c.code, c.nom);
       };
       list.appendChild(li);
     });
@@ -382,24 +431,23 @@ function wirePostalLookup(){
 async function ensureSdisLayerLoaded(){
   if(app.layers.sdisLayer) return true;
   const gj = await loadLocalJSON(PATH_SDIS);
-  if(!gj){ showError('PEI/SDIS non disponibles (données locales manquantes)'); return false; }
+  if(!gj){ showError('SDIS/SIS indisponibles (data/sdis_sis.geojson manquant)'); return false; }
   app.layers.sdisLayer = L.geoJSON(gj, {
     pointToLayer: (feat, latlng)=> L.circleMarker(latlng,{ radius:5, color:'#ff3b30', weight:2, fillOpacity:.85 }),
     onEachFeature: (feat, layer)=>{
       const props=feat.properties||{};
       const name = props.nom || props.NOM || 'SDIS/SIS';
-      layer.bindPopup(`<b>${name}</b><br>${latlngString(layer.getLatLng())}`);
-      // Option : un tap sur un SDIS peut l'ajouter comme "participant SDIS"
+      const ll = toLatLon(layer.getLatLng());
+      layer.bindPopup(`<b>${name}</b><br>${latlngStringLL(ll)}`);
+      // Double-tap: ajouter comme participant SDIS + forcer D=20 km
       layer.on('dblclick', ()=>{
-        const ll=layer.getLatLng();
-        addParticipant({ id:newId(), nom:name, lat:ll.lat, lon:ll.lng, type:'sdis' });
-        // Raccourci métier : si SDIS -> D=20km
+        addParticipant({ id:newId(), nom:name, lat:ll.lat, lon:ll.lon, type:'sdis' });
         app.distMaxKm = 20; updateCompliance(); saveProject();
         document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
           const d=Number(b.getAttribute('data-d')); const active=d===20;
           b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
         });
-        setStatus('SDIS ajouté (diamètre forcé à 20 km)');
+        setStatus('SDIS ajouté (diamètre = 20 km)');
       });
     }
   });
@@ -417,9 +465,33 @@ async function toggleSDIS(on){
   }
 }
 
+// =============== UI wiring ===============
+function wireModeButtons(){
+  const bProd=$('btnModeProducer'), bCons=$('btnModeConsumer'), bSdis=$('btnToggleSDIS');
+  if(bProd){ bProd.onclick=()=>{ app.mode='producer'; setStatus('Mode Producteur (tap pour poser)'); }; }
+  if(bCons){ bCons.onclick=()=>{ app.mode='consumer'; setStatus('Mode Consommateur (tap pour poser)'); }; }
+  if(bSdis){ bSdis.onclick=async ()=>{
+    const on = !app.layers.sdisOn; await toggleSDIS(on);
+    bSdis.setAttribute('aria-pressed', on?'true':'false');
+    bSdis.classList.toggle('active', on);
+  }; }
+}
+
+function wireDiameterChips(){
+  document.querySelectorAll('#chipDiameter .chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#chipDiameter .chip').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-pressed','false'); });
+      btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
+      app.distMaxKm = Number(btn.getAttribute('data-d')) || 2;
+      onProjectChanged();
+      setStatus(`Diamètre manuel = ${app.distMaxKm} km`);
+    });
+  });
+}
+
 // =============== Persistence ===============
 function getPayload(){
-  return { __v:6, savedAt:new Date().toISOString(), state:{
+  return { __v:7, savedAt:new Date().toISOString(), state:{
     distMaxKm: app.distMaxKm,
     producteur: app.producteur,
     participants: app.participants
@@ -442,42 +514,11 @@ function applyPayload(payload){
   app.distMaxKm = s.distMaxKm ?? 2;
   app.producteur = s.producteur || null;
   app.participants = Array.isArray(s.participants)?s.participants:[];
-  // Sync chips
   document.querySelectorAll('#chipDiameter .chip').forEach(b=>{
     const d=Number(b.getAttribute('data-d')); const active=d===app.distMaxKm;
     b.classList.toggle('active', active); b.setAttribute('aria-pressed', active?'true':'false');
   });
   afterModelChange();
-}
-
-// =============== UI WIRING ===============
-function highlightMode(){
-  // Visuel optionnel si tu as des états actifs sur les boutons
-}
-function wireModeButtons(){
-  const bProd=$('btnModeProducer'), bCons=$('btnModeConsumer'), bSdis=$('btnToggleSDIS');
-  if(bProd){ bProd.onclick=()=>{ app.mode='producer'; setStatus('Mode Producteur (tap pour poser)'); highlightMode(); }; }
-  if(bCons){ bCons.onclick=()=>{ app.mode='consumer'; setStatus('Mode Consommateur (tap pour poser)'); highlightMode(); }; }
-  if(bSdis){ bSdis.onclick=async ()=>{
-    const on = !app.layers.sdisOn; await toggleSDIS(on);
-    bSdis.setAttribute('aria-pressed', on?'true':'false');
-    bSdis.classList.toggle('active', on);
-  }; }
-}
-function wireDiameterChips(){
-  document.querySelectorAll('#chipDiameter .chip').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      document.querySelectorAll('#chipDiameter .chip').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-pressed','false'); });
-      btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
-      app.distMaxKm = Number(btn.getAttribute('data-d')) || 2;
-      onProjectChanged();
-    });
-  });
-}
-
-function wireLists(){
-  const wrap=$('listParts'); if(!wrap) return;
-  // (La liste est rafraîchie par redrawParticipants)
 }
 
 // =============== Reactions ===============
@@ -497,21 +538,17 @@ function onProjectChanged(){
     setStatus('Initialisation…');
     setupMap();
 
-    // Charger datasets locaux (autonomie)
     const [typo, cpIndex] = await Promise.all([ loadLocalJSON(PATH_TYPO), loadLocalJSON(PATH_CP) ]);
     if(typo) INSEE_TYPO = typo; else console.warn('INSEE_TYPO manquant (data/insee_typo_2025.json)');
     if(cpIndex) CP_INDEX = cpIndex; else console.warn('CP_INDEX manquant (data/cp_communes_index.json)');
 
-    // Afficher le cercle (D/2) immédiatement (même sans points)
+    // Cercle initial (D/2) même sans points (centre = centre carte normalisé)
     updateCompliance();
 
-    // UI
     wireModeButtons();
     wireDiameterChips();
     wirePostalLookup();
-    wireLists();
 
-    // Restore projet si présent
     const fromUrl = new URLSearchParams(location.search).get('project') || localStorage.getItem(STORAGE_LAST);
     if(fromUrl){
       const payload = loadProjectById(fromUrl);
