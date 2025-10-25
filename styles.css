@@ -11,11 +11,12 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   position:fixed;top:0;left:0;right:0;height:var(--top);
   display:flex;align-items:center;gap:8px;padding:0 10px;
   background:#ffffffd9;border-bottom:1px solid var(--line);
-  backdrop-filter:blur(8px); z-index:4000; pointer-events:auto;
+  backdrop-filter:blur(8px);
+  z-index:100000; pointer-events:auto; touch-action:manipulation;
 }
 .brand{font-weight:700;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .chips{display:flex;gap:6px;margin-left:auto;margin-right:8px}
-.chip{height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:600}
+.chip{height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:600;touch-action:manipulation}
 .chip.active{border-color:var(--accent);box-shadow:0 0 0 2px #2d6aff22 inset}
 .status{display:flex;gap:6px;align-items:center;font-size:12px;opacity:.9}
 .badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:999px;background:#eef2ff;color:#1b2440;border:1px solid var(--line);font-weight:700}
@@ -26,26 +27,27 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .leaflet-bottom{bottom:calc(var(--dock) + var(--safe))}
 .errors{
   position:fixed;left:8px;right:8px;top:calc(var(--top) + 8px);max-height:24dvh;overflow:auto;
-  padding:8px;background:#fff4f2;border:1px solid #f2c1b8;color:#6b1d13;border-radius:8px;z-index:4100;font-size:12px
+  padding:8px;background:#fff4f2;border:1px solid #f2c1b8;color:#6b1d13;border-radius:8px;z-index:100001;font-size:12px
 }
 .hidden{display:none}
 
-/* Dock */
+/* Dock fixe (au-dessus de la carte) */
 .dock{
   position:fixed;left:0;right:0;bottom:0;height:calc(var(--dock) + var(--safe));
   padding:10px 10px calc(10px + var(--safe));
   background:#ffffffd9;border-top:1px solid var(--line);
   display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
-  z-index:4000; pointer-events:auto; backdrop-filter:blur(8px)
+  z-index:100000; pointer-events:auto; backdrop-filter:blur(8px); touch-action:manipulation;
 }
 .dock-btn{
   height:64px;border-radius:12px;border:1px solid var(--line);
   background:var(--card);color:var(--ink);
-  font-weight:800;font-size:14px
+  font-weight:800;font-size:14px; touch-action:manipulation; cursor:pointer;
 }
 .dock-btn[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px #2d6aff22 inset}
 
-/* Leaflet tweaks */
+/* Leaflet panes sous l’UI */
+.leaflet-pane, .leaflet-top, .leaflet-bottom { z-index: 500 !important; }
 .acc-info{
   background:#ffffffd9;color:#1b2440;border:1px solid var(--line);
   padding:6px 8px;border-radius:8px;font-size:12px;line-height:1.2;backdrop-filter:blur(8px)
@@ -56,4 +58,4 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 
 /* Assure la priorité d'interactions pour topbar/dock */
 .topbar, .dock, .topbar * , .dock * { pointer-events:auto; }
-.leaflet-container { pointer-events:auto; }
+.leaflet-container { pointer-events:auto; touch-action:pan-x pan-y; }
