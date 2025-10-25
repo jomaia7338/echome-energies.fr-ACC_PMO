@@ -2,10 +2,19 @@
   "38000": [
     { "code": "38185", "nom": "Grenoble", "lat": 45.1885, "lon": 5.7245 }
   ],
-  "38210": [
-    { "code": "38198", "nom": "Saint-Quentin-sur-Isère", "lat": 45.2521, "lon": 5.5367 }
+  "38100": [
+    { "code": "38185", "nom": "Grenoble", "lat": 45.155, "lon": 5.744 }
+  ],
+  "38600": [
+    { "code": "38169", "nom": "Fontaine", "lat": 45.191, "lon": 5.684 }
+  ],
+  "38360": [
+    { "code": "38474", "nom": "Sassenage", "lat": 45.205, "lon": 5.662 }
   ],
   "38500": [
-    { "code": "38229", "nom": "Voiron", "lat": 45.364, "lon": 5.594 }
+    { "code": "38563", "nom": "Voiron", "lat": 45.364, "lon": 5.594 }
+  ],
+  "38210": [
+    { "code": "38450", "nom": "Saint-Quentin-sur-Isère", "lat": 45.2521, "lon": 5.5367 }
   ]
 }
