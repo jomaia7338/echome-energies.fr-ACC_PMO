@@ -1,13 +1,15 @@
 /* ==========================================================
-   Echome ACC – v27.2 Light
-   Boutons mobile 100% cliquables (click/touch/pointer stopPropagation)
-   4 actions : Producteur / Consommateur / Géolocaliser / SDIS
-   ACC = SEC (centre libre) • D 2/10/20 • Conformité = pire paire ≤ D
+   Echome ACC – v27.2 Light (complet)
+   - UI claire mobile-first
+   - Boutons solides (anti-capture Leaflet)
+   - Indicateur d’état global (READY/LOADING/NO_GPS/CONNECTED)
+   - Vues par rôle (Producteur / Consommateur / SDIS)
+   - ACC = SEC (centre libre) + vérif pire paire ≤ D (2/10/20)
    ========================================================== */
 
 /* ---------- Helpers ---------- */
 const $ = id => document.getElementById(id);
-const setStatus = m => { const el=$('status'); if(el) el.textContent=m; };
+const setStatus = m => { const box=$('status-text'); if(box) box.textContent = m; };
 const logErr = m => { const e=$('error-box'); if(!e) return; e.classList.remove('hidden'); e.textContent += `[${new Date().toLocaleTimeString()}] ${m}\n`; e.scrollTop=e.scrollHeight; };
 const uid = () => (crypto?.randomUUID?.() || String(Date.now()));
 
@@ -61,18 +63,16 @@ function infoHTML(maxPair, ok){
   return `<b>ACC</b> • D <b>${app.D} km</b> (R ${r} km) • max paire <b>${dMax}</b> • ${badge}`;
 }
 
-/* ---------- Bouclier UI (anti-capture) ---------- */
+/* ---------- Bouclier UI (anti-capture Leaflet) ---------- */
 function shieldUI(){
   const shield = (el)=>{
     if(!el) return;
-    // Empêche Leaflet d'intercepter
     L.DomEvent.disableClickPropagation(el);
     L.DomEvent.disableScrollPropagation(el);
     const stop = e=>{ e.preventDefault(); e.stopPropagation(); };
     ['click','pointerdown','pointerup','pointercancel','touchstart','touchend','touchmove'].forEach(ev=>{
       el.addEventListener(ev, stop, { passive:false });
     });
-    // Pour chaque bouton
     el.querySelectorAll('button').forEach(b=>{
       ['click','pointerdown','pointerup','pointercancel','touchstart','touchend','touchmove'].forEach(ev=>{
         b.addEventListener(ev, stop, { passive:false });
@@ -95,13 +95,14 @@ function wireDock(){
     setStatus(app.mode===null?'Navigation':(app.mode==='prod'?'Mode Producteur':'Mode Consommateur'));
   };
 
-  if(bProd) bProd.onclick = ()=> setMode('prod');
-  if(bCons) bCons.onclick = ()=> setMode('cons');
+  if(bProd) bProd.onclick = ()=>{ setMode('prod'); changeRoleView('Producteur'); };
+  if(bCons) bCons.onclick = ()=>{ setMode('cons'); changeRoleView('Consommateur'); };
   if(bGeo)  bGeo.onclick  = geolocate;
   if(bSDIS) bSDIS.onclick = async ()=>{
     const on = !app.layers.sdisOn;
     await toggleSDIS(on);
     bSDIS.setAttribute('aria-pressed', on?'true':'false');
+    changeRoleView('SDIS');
   };
 
   if(chips){
@@ -116,10 +117,12 @@ function wireDock(){
       });
       recompute();
       setStatus(`Diamètre = ${D} km`);
+      // rafraîchit la vue courante si définie
+      if(currentRole) setTimeout(()=>changeRoleView(currentRole),0);
     });
   }
 
-  app.mode = null;
+  app.mode = null; // par défaut navigation
 }
 
 /* ---------- Producteur / Consommateurs ---------- */
@@ -147,14 +150,12 @@ function setProducer(lat, lon){
   }
   recompute();
 }
-
 function clearProducer(){
   app.producer=null;
   if(app.layers.prod){ app.map.removeLayer(app.layers.prod); app.layers.prod=null; }
   recompute();
   setStatus('Producteur supprimé');
 }
-
 function addConsumer(lat, lon, nom){
   const p={ id:uid(), nom, lat, lon, type:'consumer' };
   const m=L.circleMarker([lat,lon],{ radius:6, color:'#2d6aff', weight:2, fillOpacity:.85 })
@@ -179,7 +180,6 @@ function addConsumer(lat, lon, nom){
   app.parts.push(p);
   recompute();
 }
-
 function removeConsumer(id, marker){
   app.parts = app.parts.filter(x=>x.id!==id);
   if(marker) app.layers.group.removeLayer(marker);
@@ -245,10 +245,9 @@ function recompute(){
   drawWorst(worst);
   drawCircle(pts, ok);
 
-  $('badge').textContent = ok==null ? '—' : (ok ? '✔︎' : '✖︎');
+  const badge=$('badge'); if(badge) badge.textContent = ok==null ? '—' : (ok ? '✔︎' : '✖︎');
   setInfo(worst?.d ?? null, ok);
 }
-
 function worstPair(pts){
   if(pts.length<2) return null;
   let w={d:0,a:null,b:null};
@@ -290,10 +289,11 @@ function setInfo(maxPair, ok){
 
 /* ---------- Géolocalisation ---------- */
 function geolocate(){
-  if(!navigator.geolocation){ setStatus("Géolocalisation indisponible"); return; }
+  if(!navigator.geolocation){ setStatus("Géolocalisation indisponible"); updateAppStatus('NO_GPS'); return; }
+  updateAppStatus('LOADING');
   navigator.geolocation.getCurrentPosition(
-    (pos)=>{ const { latitude, longitude } = pos.coords; app.map.setView([latitude, longitude], 15); setStatus('Position localisée'); },
-    (err)=>{ logErr(`Géoloc KO: ${err.message}`); setStatus('Géoloc KO'); },
+    (pos)=>{ const { latitude, longitude } = pos.coords; app.map.setView([latitude, longitude], 15); setStatus('Position localisée'); updateAppStatus('READY'); },
+    (err)=>{ logErr(`Géoloc KO: ${err.message}`); setStatus('Géoloc KO'); updateAppStatus('NO_GPS'); },
     { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
   );
 }
@@ -302,6 +302,7 @@ function geolocate(){
 async function toggleSDIS(on){
   app.layers.sdisOn = on;
   if(on){
+    updateAppStatus('LOADING');
     if(!app.layers.sdis){
       try{
         const r = await fetch('data/sdis_sis.geojson', { cache:'no-store' });
@@ -326,20 +327,108 @@ async function toggleSDIS(on){
             });
           }
         });
-      }catch(e){ logErr(`SDIS chargement KO: ${e.message}`); return; }
+      }catch(e){ logErr(`SDIS chargement KO: ${e.message}`); updateAppStatus('READY'); return; }
     }
     app.layers.sdis.addTo(app.map);
     setStatus('SDIS affichés');
+    updateAppStatus('READY');
   }else{
     if(app.layers.sdis) app.map.removeLayer(app.layers.sdis);
     setStatus('SDIS masqués');
+    updateAppStatus('READY');
   }
+}
+
+/* ---------- Indicateur d'état global ---------- */
+function updateAppStatus(state){
+  const box = document.getElementById('status-indicateur');
+  const txt = document.getElementById('status-text');
+  if(!box || !txt) return;
+  box.className = 'status-box';
+  switch(state){
+    case 'READY':     txt.textContent='Opérationnel — Connexion OK'; box.classList.add('status-ok'); break;
+    case 'LOADING':   txt.textContent='Chargement des données…';    box.classList.add('status-warning'); break;
+    case 'NO_GPS':    txt.textContent='Attention — GPS désactivé';  box.classList.add('status-error'); break;
+    case 'CONNECTED':
+    default:          txt.textContent='Prêt — Mise à jour en cours';box.classList.add('status-warning'); break;
+  }
+}
+
+/* ---------- Vues par rôle (Producteur / Consommateur / SDIS) ---------- */
+let currentRole = 'Producteur';
+let isViewLoading = false;
+
+function ensureSpinner(){
+  if(document.getElementById('busy-spin')) return;
+  const d=document.createElement('div');
+  d.id='busy-spin';
+  d.style.cssText='position:fixed;right:12px;top:calc(var(--top) + 12px);z-index:100002;background:#ffffffcc;border:1px solid #d5dceb;border-radius:12px;padding:8px 10px;display:none;font-weight:700';
+  d.textContent='Chargement…';
+  document.body.appendChild(d);
+}
+function displayLoadingSpinner(on){
+  ensureSpinner();
+  const d=document.getElementById('busy-spin');
+  if(!d) return; d.style.display = on ? 'block' : 'none';
+}
+function getUserCurrentLocation(){
+  try{ const c=app.map?.getCenter?.(); if(c) return {lat:c.lat,lon:c.lng}; }catch(e){}
+  return { lat:45.19, lon:5.68 };
+}
+function getCurrentRadius(){ return (Number(app.D)||2)/2; }
+function collectPointsByType(){
+  const out={ producteurs:[], consommateurs:[], sdis:[] };
+  if(app.producer) out.producteurs.push({ id:'prod', nom:'Producteur', lat:app.producer.lat, lon:app.producer.lon, type:'producteur' });
+  (app.parts||[]).forEach(p=>{
+    const t=(p.type||'consumer').toLowerCase();
+    if(t==='sdis'||t==='sis') out.sdis.push(p); else out.consommateurs.push(p);
+  });
+  return out;
+}
+function filterPointsByRadius(radiusKm, collectionKey, center){
+  const all=collectPointsByType(); const arr=all[collectionKey]||[];
+  if(!center) return arr;
+  return arr.filter(p=> dKm({lat:p.lat,lon:p.lon}, center) <= radiusKm + 1e-6);
+}
+function updateSummaryPanel(points, roleLabel){
+  const nb = points.length;
+  setStatus(`${roleLabel} • ${nb} point(s) dans R=${getCurrentRadius()} km`);
+  const b=$('badge'); if(b) b.textContent = nb>0 ? String(nb) : '—';
+  try{
+    const bounds=L.latLngBounds([]);
+    points.forEach(p=>bounds.extend([p.lat,p.lon]));
+    if(!points.length){
+      if(app.producer) bounds.extend([app.producer.lat,app.producer.lon]);
+      const c=app.map.getCenter(); bounds.extend([c.lat,c.lng]);
+    }
+    if(bounds.isValid()) app.map.fitBounds(bounds.pad(0.25),{maxZoom:16});
+  }catch(e){}
+}
+function highlightActiveRoleButton(newRole){
+  const mapRoleToBtnId={ 'Producteur':'btnProd','Consommateur':'btnCons','SDIS':'btnSDIS' };
+  Object.values(mapRoleToBtnId).forEach(id=>{
+    const el=$(id); if(!el) return;
+    const isActive = (id===mapRoleToBtnId[newRole]);
+    el.setAttribute('aria-pressed', isActive?'true':'false');
+  });
+}
+function changeRoleView(newRole){
+  if(currentRole===newRole || isViewLoading) return;
+  isViewLoading = true; displayLoadingSpinner(true);
+  currentRole = newRole;
+  const userLocation = getUserCurrentLocation();
+  const key = (newRole==='Producteur')?'producteurs':(newRole==='Consommateur')?'consommateurs':'sdis';
+  const points = filterPointsByRadius(getCurrentRadius(), key, userLocation);
+  updateSummaryPanel(points, newRole);
+  isViewLoading = false; displayLoadingSpinner(false);
+  highlightActiveRoleButton(newRole);
 }
 
 /* ---------- Init ---------- */
 (function init(){
+  updateAppStatus('LOADING');
   setupMap();
-  shieldUI();        // <<< anti-capture Leaflet sur topbar/dock
+  shieldUI();
   wireDock();
 
   // Sync chips init
@@ -349,5 +438,6 @@ async function toggleSDIS(on){
   });
 
   recompute();
+  updateAppStatus('READY');
   setStatus('Prêt');
 })();
