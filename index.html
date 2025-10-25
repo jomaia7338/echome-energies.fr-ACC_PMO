@@ -3,12 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <title>Carte ACC PMO</title>
-  <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 100vh; width: 100%; }
+    .controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .controls button {
+      padding: 10px 15px;
+      font-size: 18px;
+      background-color: #0078D7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      transition: background-color 0.3s ease;
+    }
+    .controls button:hover {
+      background-color: #005EA6;
+    }
+  </style>
 </head>
 <body>
   <div id="map"></div>
-
   <div class="controls">
     <button id="zoom-in">+</button>
     <button id="zoom-out">−</button>
@@ -16,6 +41,15 @@
   </div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="script.js"></script>
+  <script>
+    const map = L.map('map').setView([45.1, 5.8], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    document.getElementById('zoom-in').onclick = () => map.setZoom(map.getZoom() + 1);
+    document.getElementById('zoom-out').onclick = () => map.setZoom(map.getZoom() - 1);
+    document.getElementById('reset-view').onclick = () => map.setView([45.1, 5.8], 10);
+  </script>
 </body>
 </html>
