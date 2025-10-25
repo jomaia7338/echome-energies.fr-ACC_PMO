@@ -3,18 +3,36 @@
     { "code": "38185", "nom": "Grenoble", "lat": 45.1885, "lon": 5.7245 }
   ],
   "38100": [
-    { "code": "38185", "nom": "Grenoble", "lat": 45.155, "lon": 5.744 }
+    { "code": "38185", "nom": "Grenoble", "lat": 45.1550, "lon": 5.7440 }
   ],
   "38600": [
-    { "code": "38169", "nom": "Fontaine", "lat": 45.191, "lon": 5.684 }
+    { "code": "38169", "nom": "Fontaine", "lat": 45.1910, "lon": 5.6840 },
+    { "code": "38261", "nom": "Saint-Égrève", "lat": 45.2300, "lon": 5.6830 }
   ],
   "38360": [
-    { "code": "38474", "nom": "Sassenage", "lat": 45.205, "lon": 5.662 }
+    { "code": "38474", "nom": "Sassenage", "lat": 45.2050, "lon": 5.6620 }
+  ],
+  "38400": [
+    { "code": "38421", "nom": "Saint-Martin-d'Hères", "lat": 45.1780, "lon": 5.7630 }
+  ],
+  "38130": [
+    { "code": "38053", "nom": "Échirolles", "lat": 45.1470, "lon": 5.7200 }
+  ],
+  "38320": [
+    { "code": "38151", "nom": "Eybens", "lat": 45.1530, "lon": 5.7580 }
   ],
   "38500": [
-    { "code": "38563", "nom": "Voiron", "lat": 45.364, "lon": 5.594 }
+    { "code": "38563", "nom": "Voiron", "lat": 45.3640, "lon": 5.5940 }
+  ],
+  "38340": [
+    { "code": "38239", "nom": "Moirans", "lat": 45.3350, "lon": 5.5630 },
+    { "code": "38242", "nom": "Voreppe", "lat": 45.2980, "lon": 5.6320 }
   ],
   "38210": [
-    { "code": "38450", "nom": "Saint-Quentin-sur-Isère", "lat": 45.2521, "lon": 5.5367 }
+    { "code": "38450", "nom": "Saint-Quentin-sur-Isère", "lat": 45.2521, "lon": 5.5367 },
+    { "code": "38271", "nom": "Tullins", "lat": 45.2970, "lon": 5.4860 }
+  ],
+  "38112": [
+    { "code": "38022", "nom": "Autrans-Méaudre en Vercors", "lat": 45.1710, "lon": 5.5370 }
   ]
 }
