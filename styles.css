@@ -18,7 +18,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .chips{display:flex;gap:6px;margin-left:auto;margin-right:8px}
 .chip{height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:600;touch-action:manipulation}
 .chip.active{border-color:var(--accent);box-shadow:0 0 0 2px #2d6aff22 inset}
-.status{display:flex;gap:6px;align-items:center;font-size:12px;opacity:.9}
+.status{display:flex;gap:6px;align-items:center;font-size:12px;opacity:.95}
 .badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:999px;background:#eef2ff;color:#1b2440;border:1px solid var(--line);font-weight:700}
 
 /* Map */
@@ -56,6 +56,16 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   color:#1b2440;background:#ffffffd9;padding:2px 6px;border-radius:6px;border:1px solid var(--line);font-weight:700
 }
 
-/* Assure la priorité d'interactions pour topbar/dock */
+/* Indicateur d'état (clair) */
+.status-box{
+  padding:6px 10px; border-radius:8px; font-weight:700; display:inline-block;
+  border:1px solid var(--line); background:#ffffffd9; backdrop-filter:blur(8px);
+  font-size:12px;
+}
+.status-ok{ background:#e6ffe6; color:#0a7a2a; border-color:#bfe8c5; }
+.status-warning{ background:#fff8e6; color:#a06600; border-color:#f0db9e; }
+.status-error{ background:#ffe6e6; color:#b30000; border-color:#f2b3b3; }
+
+/* Priorité d'interactions pour topbar/dock */
 .topbar, .dock, .topbar * , .dock * { pointer-events:auto; }
 .leaflet-container { pointer-events:auto; touch-action:pan-x pan-y; }
