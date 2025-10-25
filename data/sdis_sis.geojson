@@ -1,14 +1,15 @@
 {
   "type": "FeatureCollection",
+  "name": "sdis_sis_demo_isere",
   "features": [
     {
       "type": "Feature",
-      "properties": { "nom": "SDIS 38 - Grenoble" },
+      "properties": { "nom": "SDIS 38 – Grenoble (exemple)" },
       "geometry": { "type": "Point", "coordinates": [5.7265, 45.183] }
     },
     {
       "type": "Feature",
-      "properties": { "nom": "Centre de secours Voiron" },
+      "properties": { "nom": "Centre de secours – Voiron (exemple)" },
       "geometry": { "type": "Point", "coordinates": [5.586, 45.364] }
     }
   ]
