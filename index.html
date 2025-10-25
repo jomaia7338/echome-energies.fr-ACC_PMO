@@ -1,48 +1,21 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Echome ACC – Terrain (v27.2 Light)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#f4f6fb">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8">
+  <title>Carte ACC PMO</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">Echome ACC</div>
+  <div id="map"></div>
 
-    <div class="chips" id="chipDiameter" aria-label="Diamètre ACC">
-      <button class="chip active" data-d="2" aria-pressed="true">2 km</button>
-      <button class="chip" data-d="10">10 km</button>
-      <button class="chip" data-d="20">20 km</button>
-    </div>
+  <div class="controls">
+    <button id="zoom-in">+</button>
+    <button id="zoom-out">−</button>
+    <button id="reset-view">Reset</button>
+  </div>
 
-    <div class="status">
-      <div id="status-indicateur" class="status-box status-warning">
-        <span id="status-text">Prêt — Mise à jour en cours</span>
-      </div>
-      <span id="badge" class="badge">—</span>
-    </div>
-  </header>
-
-  <main class="stage">
-    <div id="map" class="map" aria-label="Carte"></div>
-  </main>
-
-  <!-- Barre terrain : 4 actions -->
-  <nav class="dock" aria-label="Actions">
-    <button id="btnProd" class="dock-btn" aria-pressed="false">Producteur</button>
-    <button id="btnCons" class="dock-btn" aria-pressed="false">Consommateur</button>
-    <button id="btnGeo"  class="dock-btn">Géolocaliser</button>
-    <button id="btnSDIS" class="dock-btn" aria-pressed="false">SDIS / SIS</button>
-  </nav>
-
-  <pre id="error-box" class="errors hidden" aria-live="polite"></pre>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
