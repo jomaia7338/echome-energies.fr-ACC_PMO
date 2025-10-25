@@ -1,10 +1,8 @@
 /* ==========================================================
-   Echome ACC – v27 (UI simplifiée)
-   Dock 4 actions : Producteur / Consommateur / Géolocaliser / SDIS
-   Périmètre ACC = SEC (centre libre) avec D 2/10/20
-   Conformité = distance max paire ≤ D
-   Long-press producteur = supprimer ; long-press carte = ajouter consommateur
-   SDIS/SIS via data/sdis_sis.geojson (optionnel)
+   Echome ACC – v27.1 Light
+   UI épurée claire + boutons corrigés (clics/gestes)
+   4 actions : Producteur / Consommateur / Géolocaliser / SDIS
+   ACC = SEC (centre libre) • D 2/10/20 • Conformité = pire paire ≤ D
    ========================================================== */
 
 /* ---------- Helpers ---------- */
@@ -12,6 +10,7 @@ const $ = id => document.getElementById(id);
 const setStatus = m => { const el=$('status'); if(el) el.textContent=m; };
 const logErr = m => { const e=$('error-box'); if(!e) return; e.classList.remove('hidden'); e.textContent += `[${new Date().toLocaleTimeString()}] ${m}\n`; e.scrollTop=e.scrollHeight; };
 const uid = () => (crypto?.randomUUID?.() || String(Date.now()));
+const isNum = x => Number.isFinite(x);
 
 /* ---------- Géodésie + SEC ---------- */
 function hMeters(a,b){ const R=6371000, rad=d=>d*Math.PI/180, dLat=rad(b.lat-a.lat), dLon=rad(b.lon-a.lon), la1=rad(a.lat), la2=rad(b.lat); const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
@@ -45,7 +44,9 @@ function setupMap(){
   app.layers.info.onAdd = function(){
     const d=L.DomUtil.create('div','acc-info');
     d.innerHTML = infoHTML(null,null);
-    L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+    // évite que la carte capte les clics
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.disableScrollPropagation(d);
     return d;
   };
   app.layers.info.addTo(app.map);
@@ -74,35 +75,74 @@ function infoHTML(maxPair, ok){
   return `<b>ACC</b> • D <b>${app.D} km</b> (R ${r} km) • max paire <b>${dMax}</b> • ${badge}`;
 }
 
-/* ---------- Actions UI ---------- */
+/* ---------- Actions UI (boutons) ---------- */
+function shieldUI(){
+  const top = document.querySelector('.topbar');
+  const dock = document.querySelector('.dock');
+  [top, dock].forEach(el=>{
+    if(!el) return;
+    L.DomEvent.disableClickPropagation(el);
+    L.DomEvent.disableScrollPropagation(el);
+    el.addEventListener('click', e=>{ e.stopPropagation(); }, { passive:false });
+    el.addEventListener('touchstart', e=>{ e.stopPropagation(); }, { passive:false });
+  });
+}
+
 function wireDock(){
   const bProd=$('btnProd'), bCons=$('btnCons'), bGeo=$('btnGeo'), bSDIS=$('btnSDIS');
+  const chips=$('chipDiameter');
+
   const setMode = (m)=>{
     app.mode = (app.mode===m? null : m);
-    bProd.setAttribute('aria-pressed', app.mode==='prod'?'true':'false');
-    bCons.setAttribute('aria-pressed', app.mode==='cons'?'true':'false');
+    if(bProd) bProd.setAttribute('aria-pressed', app.mode==='prod'?'true':'false');
+    if(bCons) bCons.setAttribute('aria-pressed', app.mode==='cons'?'true':'false');
     setStatus(app.mode===null?'Navigation':(app.mode==='prod'?'Mode Producteur':'Mode Consommateur'));
   };
-  bProd.onclick=()=>setMode('prod');
-  bCons.onclick=()=>setMode('cons');
-  bGeo.onclick = geolocate;
-  bSDIS.onclick= async ()=>{
-    const on = !app.layers.sdisOn;
-    await toggleSDIS(on);
-    bSDIS.setAttribute('aria-pressed', on?'true':'false');
-  };
+
+  if(bProd){
+    bProd.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setMode('prod'); }, { passive:false });
+    bProd.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
+  }
+  if(bCons){
+    bCons.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setMode('cons'); }, { passive:false });
+    bCons.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
+  }
+  if(bGeo){
+    bGeo.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); geolocate(); }, { passive:false });
+    bGeo.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
+  }
+  if(bSDIS){
+    bSDIS.addEventListener('click', async (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const on = !app.layers.sdisOn;
+      await toggleSDIS(on);
+      bSDIS.setAttribute('aria-pressed', on?'true':'false');
+    }, { passive:false });
+    bSDIS.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:false });
+  }
 
   // Chips diamètre
-  $('chipDiameter').addEventListener('click', (e)=>{
-    const btn = e.target.closest('.chip[data-d]'); if(!btn) return;
-    const D = Number(btn.getAttribute('data-d'))||2; app.D=D;
-    document.querySelectorAll('#chipDiameter .chip').forEach(c=>{
-      const on = Number(c.getAttribute('data-d'))===D;
-      c.classList.toggle('active', on); c.setAttribute('aria-pressed', on?'true':'false');
-    });
-    recompute();
-    setStatus(`Diamètre = ${D} km`);
-  });
+  if(chips){
+    L.DomEvent.disableClickPropagation(chips);
+    L.DomEvent.disableScrollPropagation(chips);
+    chips.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const btn = e.target.closest('.chip[data-d]');
+      if(!btn) return;
+      const D = Number(btn.getAttribute('data-d'))||2;
+      app.D = D;
+      chips.querySelectorAll('.chip').forEach(c=>{
+        const on = Number(c.getAttribute('data-d'))===D;
+        c.classList.toggle('active', on);
+        c.setAttribute('aria-pressed', on?'true':'false');
+      });
+      recompute();
+      setStatus(`Diamètre = ${D} km`);
+    }, { passive:false });
+  }
+
+  // Mode par défaut : navigation
+  app.mode = null;
 }
 
 /* ---------- Producteur / Consommateurs ---------- */
@@ -111,7 +151,7 @@ function setProducer(lat, lon){
   if(!app.layers.prod){
     app.layers.prod = L.marker([lat,lon],{
       draggable:true,
-      icon:L.divIcon({className:'picon', html:'<div style="width:18px;height:18px;border-radius:50%;background:#f5b841;border:2px solid #b58900"></div>', iconSize:[20,20], iconAnchor:[10,20]})
+      icon:L.divIcon({className:'picon', html:'<div style="width:18px;height:18px;border-radius:50%;background:#ffd24a;border:2px solid #c9a300"></div>', iconSize:[20,20], iconAnchor:[10,20]})
     }).addTo(app.map);
 
     // drag -> recalc
@@ -142,7 +182,7 @@ function clearProducer(){
 
 function addConsumer(lat, lon, nom){
   const p={ id:uid(), nom, lat, lon, type:'consumer' };
-  const m=L.circleMarker([lat,lon],{ radius:6, color:'#4ea2ff', weight:2, fillOpacity:.85 })
+  const m=L.circleMarker([lat,lon],{ radius:6, color:'#2d6aff', weight:2, fillOpacity:.85 })
     .addTo(app.layers.group);
 
   // popup + suppression
@@ -194,12 +234,11 @@ function enableLongPressToAdd(){
 
 /* ---------- Compliance + cercle ACC (centre libre) ---------- */
 function recompute(){
-  // Nettoie overlays participants (on reconstruit simple)
+  // Nettoie overlays participants
   app.layers.group.clearLayers();
   // Redessine participants
   app.parts.forEach(p=>{
-    const m=L.circleMarker([p.lat,p.lon],{ radius:6, color:'#4ea2ff', weight:2, fillOpacity:.85 }).addTo(app.layers.group);
-    // Attache UI
+    const m=L.circleMarker([p.lat,p.lon],{ radius:6, color:'#2d6aff', weight:2, fillOpacity:.85 }).addTo(app.layers.group);
     const html = `<b>${p.nom}</b><br>${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}<br>
       <div style="margin-top:6px;display:flex;gap:6px">
         <button id="c-${p.id}" class="btn">Centrer</button>
@@ -216,22 +255,20 @@ function recompute(){
     m.on('touchend', ()=>{ pressed=false; if(t) clearTimeout(t); });
   });
 
-  // Producteur (s'il existe) doit rester affiché
+  // Producteur
   if(app.producer){
     if(!app.layers.prod){
       app.layers.prod = L.marker([app.producer.lat,app.producer.lon],{
         draggable:true,
-        icon:L.divIcon({className:'picon', html:'<div style="width:18px;height:18px;border-radius:50%;background:#f5b841;border:2px solid #b58900"></div>', iconSize:[20,20], iconAnchor:[10,20]})
+        icon:L.divIcon({className:'picon', html:'<div style="width:18px;height:18px;border-radius:50%;background:#ffd24a;border:2px solid #c9a300"></div>', iconSize:[20,20], iconAnchor:[10,20]})
       }).addTo(app.map);
     }else{
       app.layers.prod.setLatLng([app.producer.lat,app.producer.lon]);
     }
   }
 
-  // Points pour calcul : producteur + consommateurs
-  const pts = [];
-  if(app.producer) pts.push(app.producer);
-  app.parts.forEach(p=>pts.push({lat:p.lat,lon:p.lon}));
+  // Points pour calcul
+  const pts=[]; if(app.producer) pts.push(app.producer); app.parts.forEach(p=>pts.push({lat:p.lat,lon:p.lon}));
 
   // Pire paire & SEC
   const worst = worstPair(pts);
@@ -254,12 +291,11 @@ function worstPair(pts){
   return w;
 }
 function drawWorst(w){
-  // clear
   if(app.layers.worstLine){ app.map.removeLayer(app.layers.worstLine); app.layers.worstLine=null; }
   if(app.layers.worstLabel){ app.map.removeLayer(app.layers.worstLabel); app.layers.worstLabel=null; }
   if(!w) return;
   const ok = w.d <= app.D;
-  app.layers.worstLine = L.polyline([[w.a.lat,w.a.lon],[w.b.lat,w.b.lon]], { color: ok?'#2ecc71':'#e67e22', weight:4, opacity:.9 }).addTo(app.map);
+  app.layers.worstLine = L.polyline([[w.a.lat,w.a.lon],[w.b.lat,w.b.lon]], { color: ok?'#1aa255':'#d9822b', weight:4, opacity:.9 }).addTo(app.map);
   const mid={lat:(w.a.lat+w.b.lat)/2, lon:(w.a.lon+w.b.lon)/2};
   app.layers.worstLabel = L.marker([mid.lat, mid.lon], { icon: L.divIcon({ className:'maxpair-label', html:`${w.d.toFixed(2)} km / ≤ ${app.D} km` }) }).addTo(app.map);
 }
@@ -267,7 +303,7 @@ function drawCircle(pts, ok){
   const sec = smallestCircle(pts);
   const center = sec?.c || (app.producer || app.map.getCenter());
   const rMeters = (app.D/2)*1000;
-  const color = ok ? '#2ecc71' : '#e67e22';
+  const color = ok ? '#1aa255' : '#d9822b';
   if(!app.layers.circle){
     app.layers.circle = L.circle([center.lat,center.lon],{
       radius:rMeters, color, weight:3, opacity:1, fillOpacity:.06, fillColor:color, dashArray:'8,6'
@@ -289,7 +325,7 @@ function geolocate(){
   navigator.geolocation.getCurrentPosition(
     (pos)=>{
       const { latitude, longitude } = pos.coords;
-      app.map.setView([latitude, longitude], 14);
+      app.map.setView([latitude, longitude], 15);
       setStatus('Position localisée');
     },
     (err)=>{ logErr(`Géoloc KO: ${err.message}`); setStatus('Géoloc KO'); },
@@ -307,21 +343,20 @@ async function toggleSDIS(on){
         if(!r.ok) throw new Error(`HTTP ${r.status}`);
         const gj = await r.json();
         app.layers.sdis = L.geoJSON(gj, {
-          pointToLayer:(feat,latlng)=>L.circleMarker(latlng,{radius:5,color:'#ff3b30',weight:2,fillOpacity:.9}),
+          pointToLayer:(feat,latlng)=>L.circleMarker(latlng,{radius:5,color:'#d93025',weight:2,fillOpacity:.9}),
           onEachFeature:(feat,layer)=>{
             const name = (feat.properties && (feat.properties.nom||feat.properties.NOM)) || 'SDIS/SIS';
             let ll=null;
             if(typeof layer.getLatLng==='function'){ const raw=layer.getLatLng(); ll={lat:Number(raw.lat),lon:Number(raw.lng)}; }
             if(!ll && feat.geometry && feat.geometry.type==='Point'){ const [x,y]=feat.geometry.coordinates; ll={lat:y,lon:x}; }
             layer.bindPopup(ll? `<b>${name}</b><br>${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}` : `<b>${name}</b>`);
-            // double-tap → ajoute comme “référence” (participant d’info)
             layer.on('dblclick', ()=>{
               if(!ll) return;
               addConsumer(ll.lat, ll.lon, name);
-              // force D=20 dans la logique d’usage SDIS
               app.D=20; document.querySelectorAll('#chipDiameter .chip').forEach(c=>{
                 const on = Number(c.getAttribute('data-d'))===20; c.classList.toggle('active',on); c.setAttribute('aria-pressed',on?'true':'false');
               });
+              recompute();
               setStatus('SDIS ajouté (D=20 km)');
             });
           }
@@ -339,6 +374,7 @@ async function toggleSDIS(on){
 /* ---------- Init ---------- */
 (function init(){
   setupMap();
+  shieldUI();
   wireDock();
 
   // Sync chips init
