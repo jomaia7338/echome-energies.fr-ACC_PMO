@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="fr">
+>
 <head>
   <meta charset="utf-8" />
   <title>Echome Énergies — ACC terrain</title>
@@ -9,73 +10,63 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
-  <!-- Barre haute -->
   <header class="topbar">
     <div class="brand">Echome Énergies — ACC</div>
     <div class="status-line">
       <span id="status">Initialisation…</span>
-      <span class="badge" id="badgeCompliance" aria-label="Conformité">—</span>
+      <span class="badge" id="badgeCompliance">—</span>
     </div>
   </header>
 
-  <!-- Carte -->
-  <main class="map-stage" role="main">
-    <div id="map" class="map" aria-label="Carte principale"></div>
+  <main class="map-stage">
+    <div id="map" class="map"></div>
+
+    <!-- Boutons flottants (terrain) -->
+    <div class="fab-col" aria-label="Actions rapides">
+      <button class="fab-btn primary" id="fabMode" title="Basculer Pan / Producteur / Consommateur">Pan</button>
+      <button class="fab-btn" id="fabPlus" title="Ajout rapide consommateur">+</button>
+      <button class="fab-btn ghost" id="fabCenter" title="Recentrer le projet">⤢</button>
+    </div>
   </main>
 
-  <!-- Erreurs -->
-  <pre id="error-box" class="hidden" aria-live="polite"></pre>
-
-  <!-- Panneau latéral liste -->
-  <aside class="list hidden" id="asideParts" aria-label="Participants">
-    <div class="list-head">
-      <strong>Participants</strong>
-      <button class="btn" id="btnHideList">Fermer</button>
-    </div>
-    <div id="listParts"></div>
-  </aside>
-
-  <!-- Barre inférieure (one-hand) -->
-  <nav class="btmbar" aria-label="Actions principales">
-    <!-- Onglets -->
+  <nav class="btmbar">
     <div class="tabs" id="tabs">
       <button class="tab active" data-panel="panel-actions" aria-pressed="true">Actions</button>
       <button class="tab" data-panel="panel-commune" aria-pressed="false">Commune</button>
       <button class="tab" data-panel="panel-couches" aria-pressed="false">Couches</button>
     </div>
 
-    <!-- PANELS -->
-    <section class="panel active" id="panel-actions" aria-label="Actions">
+    <section class="panel active" id="panel-actions">
       <div class="row">
-        <div class="chips" id="chipDiameter" aria-label="Diamètre ACC">
-          <button type="button" class="chip active" data-d="2" aria-pressed="true">D 2 km</button>
-          <button type="button" class="chip" data-d="10" aria-pressed="false">D 10 km</button>
-          <button type="button" class="chip" data-d="20" aria-pressed="false">D 20 km</button>
+        <div class="chips" id="chipDiameter">
+          <button class="chip active" data-d="2" aria-pressed="true">D 2 km</button>
+          <button class="chip" data-d="10">D 10 km</button>
+          <button class="chip" data-d="20">D 20 km</button>
         </div>
       </div>
       <div class="row">
-        <button type="button" class="btn" id="btnModeProducer" title="Placer le producteur">Producteur</button>
-        <button type="button" class="btn" id="btnModeConsumer" title="Placer un consommateur">Consommateur</button>
-        <button type="button" class="btn" id="btnToggleList" title="Afficher la liste">Liste</button>
+        <button class="btn" id="btnToggleList">Liste</button>
       </div>
     </section>
 
-    <section class="panel" id="panel-commune" aria-label="Commune">
+    <section class="panel" id="panel-commune">
       <div class="row">
-        <input type="text" id="cpInput" inputmode="numeric" pattern="[0-9]*" maxlength="5"
-               placeholder="Code postal" />
-        <button type="button" class="btn" id="btnSearchCP">Chercher</button>
+        <input type="text" id="cpInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="Code postal" />
+        <button class="btn" id="btnSearchCP">Chercher</button>
       </div>
       <ul id="cpResults"></ul>
     </section>
 
-    <section class="panel" id="panel-couches" aria-label="Couches">
+    <section class="panel" id="panel-couches">
       <div class="row">
-        <button type="button" class="chip" id="btnToggleSDIS" aria-pressed="false">SDIS / SIS</button>
+        <button class="chip" id="btnToggleSDIS" aria-pressed="false">SDIS / SIS</button>
       </div>
     </section>
   </nav>
+
+  <pre id="error-box" class="hidden"></pre>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
