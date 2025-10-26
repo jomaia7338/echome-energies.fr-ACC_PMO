@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACC PV – Centre libre (diamètre) + d_max + SDIS</title>
+  <title>ACC – Centre libre (diamètre) + POI Incendie</title>
 
   <!-- Leaflet CSS (+ fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
@@ -15,7 +15,7 @@
   <style>
     :root{--ink:#1c1c1c;--line:#e6eaea;--muted:#f7f8f8;--ok:#0f766e;--bad:#b91c1c;--brand:#37C3AF}
     html,body{height:100%}
-    body{margin:0;font-family:'Open Sans',system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink);background:#fff}
+    body{margin:0;font-family:'Open Sans', system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;color:var(--ink);background:#fff}
 
     /* Header */
     header.slim{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:6px 8px}
@@ -31,15 +31,16 @@
     .btn{padding:6px 8px;border:1px solid var(--brand);border-radius:10px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700}
     .btn.icon{padding:6px 8px;min-width:36px;display:inline-flex;align-items:center;justify-content:center}
     .btn.secondary{background:#fff;color:#0f4f47;border-color:var(--brand)}
-    select,input[type="number"],input[type="text"]{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+    select, input[type="number"], input[type="text"]{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 
     #status{margin:6px 8px 0;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;font-size:14px}
     #status.ok{background:rgba(55,195,175,.08);border-color:rgba(55,195,175,.45);color:#116a60}
     #status.ko{background:#fff5f3;border-color:#f6d2cc}
+
     #map{min-height:420px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
 
     /* Drawer */
-    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:400px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
+    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:380px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
     #drawer.open{transform:none}
     #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
     #drawer h2{font-family:'Montserrat',sans-serif;font-size:16px;margin:0}
@@ -55,10 +56,24 @@
     .legend-overlay .item{display:flex;align-items:center;gap:6px}
 
     /* Échelle 1:n */
-    .leaflet-control.ratio-control{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;z-index:1000}
+    .leaflet-control.ratio-control{
+      background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;
+      padding:4px 8px;font-size:12px;z-index:1000
+    }
 
     /* Centre libre (tooltip) */
     .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+
+    /* Sélection & Snackbar */
+    .marker-selected { outline:3px solid rgba(55,195,175,.85); outline-offset:2px; }
+    .snackbar {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 14px; background: #111827; color: #fff;
+      padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.2);
+      font-size: 14px; display: none; z-index: 6000;
+    }
+    .snackbar.show { display: inline-flex; align-items: center; gap: 12px; }
+    .snackbar button { background:#fff; color:#111; border:0; border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:700; }
 
     /* PRINT */
     .print-header{display:none}
@@ -93,13 +108,13 @@
     </div>
 
     <div class="controls">
-      <!-- Type de point -->
+      <!-- Type de point à ajouter (Participants ACC seulement) -->
       <div class="group" role="radiogroup" aria-label="Type de point (ACC)">
         <label class="chip"><input type="radio" name="ptype" value="consumer" checked> <span class="dot cons"></span>Cons.</label>
         <label class="chip"><input type="radio" name="ptype" value="producer"> <span class="dot prod"></span>Prod.</label>
       </div>
 
-      <!-- Diamètre ACC + SIS info -->
+      <!-- Diamètre ACC -->
       <div class="group" aria-label="Diamètre">
         <label class="small">Diamètre :</label>
         <select id="limitSel" aria-label="Diamètre autorisé">
@@ -109,9 +124,6 @@
           <option value="custom">Perso</option>
         </select>
         <input id="customKm" type="number" min="0" step="0.1" placeholder="km" style="width:90px;display:none" aria-label="Diamètre personnalisé">
-        <label class="small" title="Information : si SIS participant + ruralité producteur, D=20 km (cf. règles).">
-          <input id="sisToggle" type="checkbox"> SIS participant
-        </label>
       </div>
 
       <!-- Actions -->
@@ -132,18 +144,17 @@
         <rect x="0" y="0" width="120" height="32" rx="6" fill="#37C3AF"/>
         <text x="60" y="19" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="14" fill="#ffffff">ECHOME</text>
       </svg>
-      <span class="title">ACC PV – Centre libre (diamètre)</span>
+      <span class="title">ACC – Centre libre (diamètre) — Visualisation POI</span>
     </div>
     <div class="right small" id="printMeta"></div>
   </div>
 
   <div id="status" role="status" aria-live="polite">Initialisation…</div>
-
-  <div id="map" aria-label="Carte interactive" tabindex="0">
+  <div id="map" aria-label="Carte interactive">
     <div class="legend-overlay" aria-hidden="true">
       <div class="item"><span class="dot prod"></span>Producteur</div>
       <div class="item"><span class="dot cons"></span>Consommateur</div>
-      <div class="item"><span class="dot poi"></span>POI incendie (SDIS/SIS)</div>
+      <div class="item"><span class="dot poi"></span>POI incendie (SDIS/SDMIS/STIS/SLIS…)</div>
     </div>
   </div>
 
@@ -154,7 +165,6 @@
       <button id="drawerClose" class="btn secondary">Fermer</button>
     </header>
     <div class="content">
-
       <fieldset>
         <legend>Projet</legend>
         <div class="row">
@@ -175,19 +185,19 @@
 
       <fieldset>
         <legend>Import rapide (participants ACC)</legend>
-        <div class="small">Format : <code>Nom;Lat;Lon;Type</code> — Types : <strong>consumer</strong> / <strong>producer</strong></div>
+        <div class="small">Format : Nom;Lat;Lon;Type — Types : consumer / producer</div>
         <textarea id="bulk" placeholder="Usine A;45.76;4.84;producer&#10;Collège B;45.77;4.86;consumer"></textarea>
         <div style="margin-top:8px"><button id="importBtn" class="btn">Importer</button></div>
       </fieldset>
 
       <fieldset>
-        <legend>Points d’intérêt “Incendie & Secours” (Isère)</legend>
-        <div class="small">OSM/Overpass – département 38. <em>amenity=fire_station</em>.</div>
+        <legend>Points d’intérêt “Incendie & Secours”</legend>
+        <div class="small">OSM/Overpass – Isère. Noms/opérateurs contenant : SDIS, SDMIS, STIS, SLIS (autres casernes incluses).</div>
         <div class="row" style="margin-top:6px">
           <button id="loadPoiIsere" class="btn">Charger POI Isère</button>
           <label class="small"><input type="checkbox" id="togglePoi" checked> Afficher POI</label>
         </div>
-        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0</span> — Dans D/2 : <span id="poiInRange">0</span></div>
+        <div class="small" style="margin-top:6px">POI : <span id="poiStats">0 chargé(s)</span> — Dans D/2 : <span id="poiInRange">0</span></div>
       </fieldset>
 
       <fieldset>
@@ -208,6 +218,11 @@
       <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span></div>
     </div>
   </aside>
+
+  <!-- Snackbar (Undo) -->
+  <div id="snackbar" class="snackbar" role="status" aria-live="polite">
+    Supprimé. <button id="undoBtn" type="button">Annuler</button>
+  </div>
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
@@ -260,19 +275,6 @@
         const center=unprojectLocal(lat0,lon0,best.x,best.y); return {center, r:best.r};
       }
 
-      // d_max (couple limitant)
-      function farthestPair(points){
-        if(points.length<2) return null;
-        let max= -1, pair=[0,1];
-        for(let i=0;i<points.length;i++){
-          for(let j=i+1;j<points.length;j++){
-            const d = haversineKm(points[i], points[j]);
-            if(d>max){ max=d; pair=[i,j]; }
-          }
-        }
-        return {dmax:max, i:pair[0], j:pair[1]};
-      }
-
       // Carte
       const map = L.map('map', { zoomControl:true }).setView([45.3, 5.6], 8);
       const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© OpenStreetMap' });
@@ -307,64 +309,234 @@
       const participants=[]; // {id,name,type,lat,lng,marker}
       const pois=[];         // {id,name,kind,lat,lng,marker}
       let uid=0;
-      let vizCircle=null;         // cercle visuel ACC (diamètre -> rayon D/2)
-      let farPairLine=null;       // segment du couple limitant
+      let vizCircle=null; // cercle visuel ACC (diamètre)
       const colors={producer:'#6D28D9', consumer:'#2e86de', poi:'#E10600'};
+
+      // Couches
       const participantLayer = L.layerGroup().addTo(map);
       const poiLayer = L.layerGroup().addTo(map);
+
+      // ===== Sélection / Undo (UX) =====
+      let selectedEntry = null; // {id, type:'participant'|'poi', ref:entry}
+      const historyStack = [];  // pile pour undo
+
+      function selectEntry(entry, layerType){
+        // désélection précédente
+        if (selectedEntry && selectedEntry.ref && selectedEntry.ref.marker){
+          try{
+            selectedEntry.ref.marker._path && selectedEntry.ref.marker._path.classList.remove('marker-selected');
+            selectedEntry.ref.marker.setStyle && selectedEntry.ref.marker.setStyle({ weight:2 });
+          }catch(_){}
+        }
+        selectedEntry = { id: entry.id, type: layerType, ref: entry };
+        try{
+          entry.marker._path && entry.marker._path.classList.add('marker-selected');
+          entry.marker.setStyle && entry.marker.setStyle({ weight:3 });
+        }catch(_){}
+      }
+      function clearSelection(){
+        if (selectedEntry && selectedEntry.ref && selectedEntry.ref.marker){
+          try{
+            selectedEntry.ref.marker._path && selectedEntry.ref.marker._path.classList.remove('marker-selected');
+            selectedEntry.ref.marker.setStyle && selectedEntry.ref.marker.setStyle({ weight:2 });
+          }catch(_){}
+        }
+        selectedEntry = null;
+      }
+      function attachLongPress(layer, action, delay=600){
+        let timer=null;
+        layer.on('mousedown touchstart', ()=>{
+          timer = setTimeout(()=>{ timer=null; action(); }, delay);
+        });
+        function cancel(){ if(timer){ clearTimeout(timer); timer=null; } }
+        layer.on('mouseup mouseleave touchend dragstart move', cancel);
+      }
+      function showSnackbarUndo(cb){
+        const el = document.getElementById('snackbar');
+        const btn = document.getElementById('undoBtn');
+        let hideTimer = null;
+        btn.onclick = ()=>{
+          try{ cb && cb(); }finally{
+            el.classList.remove('show');
+            if(hideTimer) clearTimeout(hideTimer);
+          }
+        };
+        el.classList.add('show');
+        if(hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(()=> el.classList.remove('show'), 6000);
+      }
+      function deleteEntry(entry, layerType){
+        if(layerType==='participant'){
+          const i = participants.findIndex(p=>p.id===entry.id);
+          if(i>-1){
+            participantLayer.removeLayer(participants[i].marker);
+            const removed = participants.splice(i,1)[0];
+            historyStack.push({ type:'delete', payload:{ entry: removed, layerType }});
+            updateCount(); refreshACC();
+            showSnackbarUndo(()=> undoLast());
+          }
+        }else if(layerType==='poi'){
+          const i = pois.findIndex(p=>p.id===entry.id);
+          if(i>-1){
+            poiLayer.removeLayer(pois[i].marker);
+            const removed = pois.splice(i,1)[0];
+            historyStack.push({ type:'delete', payload:{ entry: removed, layerType }});
+            setPoiStats(); updatePoiInRange();
+            showSnackbarUndo(()=> undoLast());
+          }
+        }
+        clearSelection();
+      }
+      function undoLast(){
+        const last = historyStack.pop();
+        if(!last) return;
+        if(last.type==='delete'){
+          const { entry, layerType } = last.payload;
+          if(layerType==='participant'){
+            const m=L.circleMarker([entry.lat,entry.lng],{radius:7,color:colors[entry.type],weight:2,fillColor:colors[entry.type],fillOpacity:0.3}).addTo(participantLayer);
+            entry.marker = m;
+            bindParticipantUI(entry);
+            participants.push(entry);
+            updateCount(); refreshACC();
+          }else{
+            const m=L.circleMarker([entry.lat,entry.lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
+            entry.marker = m;
+            bindPoiUI(entry);
+            pois.push(entry);
+            setPoiStats(); updatePoiInRange();
+          }
+        }
+      }
 
       // UI helpers
       function selectedType(){ return document.querySelector('input[name="ptype"]:checked').value; }
       function currentDiameter(){ const sel=document.getElementById('limitSel').value; if(sel==='custom'){ const v=parseFloat(document.getElementById('customKm').value||'0'); return (isNaN(v)||v<=0)?20:v; } return parseFloat(sel); }
       function updateCount(){ const c=document.getElementById('count'); const n=participants.length; const np=participants.filter(p=>p.type==='producer').length; c.textContent = n? `${n} point${n>1?'s':''} dont ${np} producteur${np>1?'s':''}.` : 'Aucun point.'; }
+      function setPoiStats(){ poiStatsEl.textContent = `${pois.length} chargé(s)`; }
 
-      // PARTICIPANTS
+      // ==== PARTICIPANTS (ajout + UI bind) ====
       function addParticipant(lat,lng,type,name){
         const id=++uid; const label=name || `${type} ${id}`;
         const m=L.circleMarker([lat,lng],{radius:7,color:colors[type],weight:2,fillColor:colors[type],fillOpacity:0.3}).addTo(participantLayer);
         const entry={id,name:label,type,lat,lng,marker:m};
-        m.bindTooltip(`${safeText(label)} (${type})`);
-        m.bindPopup(makeParticipantPopup(entry));
-        m.on('contextmenu', ()=> removeParticipant(id));
+        bindParticipantUI(entry);
         participants.push(entry);
         refreshACC(true);
       }
-      function makeParticipantPopup(entry){
-        const wrap=document.createElement('div');
-        const title=document.createElement('strong'); title.textContent=entry.name||''; wrap.appendChild(title);
-        wrap.appendChild(document.createElement('br'));
-        wrap.appendChild(document.createTextNode(entry.type));
-        const box=document.createElement('div'); box.style.marginTop='6px'; box.style.display='flex'; box.style.gap='6px'; box.style.flexWrap='wrap';
-        const bRen=document.createElement('button'); bRen.className='btn secondary'; bRen.textContent='Renommer';
-        bRen.onclick=()=>{ const nn=prompt('Nouveau nom :', entry.name||''); if(nn&&nn.trim()){ entry.name=nn.trim(); entry.marker.setPopupContent(makeParticipantPopup(entry)); entry.marker.bindTooltip(`${entry.name} (${entry.type})`); } };
-        const bDel=document.createElement('button'); bDel.className='btn secondary'; bDel.textContent='Supprimer';
-        bDel.onclick=()=> removeParticipant(entry.id);
-        box.appendChild(bRen); box.appendChild(bDel); wrap.appendChild(box);
-        return wrap;
-      }
-      function removeParticipant(id){
-        const i=participants.findIndex(p=>p.id===id);
-        if(i>-1){ participantLayer.removeLayer(participants[i].marker); participants.splice(i,1); refreshACC(); }
-      }
-      map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
+      function bindParticipantUI(entry){
+        const m = entry.marker;
+        m.bindTooltip(`${safeText(entry.name)} (${entry.type})`);
 
-      // POI
+        const html = `
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:180px">
+            <strong>${esc(entry.name||'')}</strong>
+            <div class="small">${esc(entry.type)}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn secondary" data-act="rename" data-id="${entry.id}">Renommer</button>
+              <button class="btn secondary" data-act="delete" data-id="${entry.id}">Supprimer</button>
+            </div>
+          </div>`;
+        m.bindPopup(html);
+
+        m.on('popupopen', e=>{
+          const root=e.popup.getElement();
+          L.DomEvent.disableClickPropagation(root);
+          const ren=root.querySelector(`button[data-act="rename"][data-id="${entry.id}"]`);
+          const del=root.querySelector(`button[data-act="delete"][data-id="${entry.id}"]`);
+          if(ren) ren.addEventListener('click', ()=>{
+            const nn=prompt('Nouveau nom :', entry.name||'');
+            if(nn&&nn.trim()){
+              entry.name=nn.trim();
+              const newHtml = `
+                <div style="display:flex;flex-direction:column;gap:8px;min-width:180px">
+                  <strong>${esc(entry.name||'')}</strong>
+                  <div class="small">${esc(entry.type)}</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="btn secondary" data-act="rename" data-id="${entry.id}">Renommer</button>
+                    <button class="btn secondary" data-act="delete" data-id="${entry.id}">Supprimer</button>
+                  </div>
+                </div>`;
+              entry.marker.setPopupContent(newHtml);
+              entry.marker.bindTooltip(`${safeText(entry.name)} (${entry.type})`);
+            }
+          });
+          if(del) del.addEventListener('click', ()=>{
+            entry.marker.closePopup();
+            if(confirm('Supprimer ce participant ?')){
+              deleteEntry(entry,'participant');
+            }
+          });
+        });
+
+        // Sélection + long-press
+        m.on('click', ()=> selectEntry(entry,'participant'));
+        attachLongPress(m, ()=> {
+          if(confirm(`Supprimer « ${entry.name} » ?`)){
+            deleteEntry(entry,'participant');
+          }
+        });
+        // clic-droit (desktop) = suppression directe avec confirmation
+        m.on('contextmenu', ()=>{
+          if(confirm(`Supprimer « ${entry.name} » ?`)){
+            deleteEntry(entry,'participant');
+          }
+        });
+      }
+
+      // ==== POI (ajout + UI bind) ====
       function addPOI(lat,lng,kind,name){
         const id=++uid; const label=name||kind||'POI';
         const m=L.circleMarker([lat,lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
         const entry={id,name:label,kind,lat,lng,marker:m};
-        m.bindTooltip(`${safeText(label)} — ${kind||'incendie'}`);
+        bindPoiUI(entry);
         pois.push(entry);
         setPoiStats();
-        updatePoiInRange(); // si un cercle existe
+        updatePoiInRange();
       }
-      function setPoiStats(){ poiStatsEl.textContent = String(pois.length); }
+      function bindPoiUI(entry){
+        const m = entry.marker;
+        m.bindTooltip(`${safeText(entry.name)} — ${entry.kind||'incendie'}`);
 
-      // ACC core
-      function clearViz(){
-        if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; }
-        if(farPairLine){ map.removeLayer(farPairLine); farPairLine=null; }
+        const html = `
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:180px">
+            <strong>${esc(entry.name||'POI')}</strong>
+            <div class="small">${esc(entry.kind||'incendie')}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn secondary" data-act="delete" data-id="${entry.id}">Supprimer</button>
+            </div>
+          </div>`;
+        m.bindPopup(html);
+
+        m.on('popupopen', e=>{
+          const root=e.popup.getElement();
+          L.DomEvent.disableClickPropagation(root);
+          const del=root.querySelector(`button[data-act="delete"][data-id="${entry.id}"]`);
+          if(del) del.addEventListener('click', ()=>{
+            m.closePopup();
+            if(confirm('Supprimer ce POI ?')){
+              deleteEntry(entry,'poi');
+            }
+          });
+        });
+
+        m.on('click', ()=> selectEntry(entry,'poi'));
+        attachLongPress(m, ()=> {
+          if(confirm(`Supprimer « ${entry.name} » ?`)){
+            deleteEntry(entry,'poi');
+          }
+        });
+        m.on('contextmenu', ()=>{
+          if(confirm(`Supprimer « ${entry.name} » ?`)){
+            deleteEntry(entry,'poi');
+          }
+        });
       }
+
+      // Ajout de participants par clic carte
+      map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
+
+      // ACC core (ne dépend que des participants)
+      function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } }
       function styleParticipants(center, R){
         participants.forEach(p=>{
           const d = haversineKm(center,{lat:p.lat,lng:p.lng});
@@ -380,35 +552,12 @@
       function refreshACC(autoFit=false){
         updateCount();
         const D=currentDiameter(); const R=D/2;
-        clearViz();
-
-        if(!participants.some(p=>p.type==='producer')){
-          tSet(statusEl,'Placez au moins un point Producteur pour évaluer la conformité.');
-          poiInRangeEl.textContent='0';
-          return;
-        }
-        if(participants.length===1){
-          vizCircle = L.circle([participants[0].lat,participants[0].lng],{ radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6' })
-            .addTo(map).bindTooltip('Centre libre (visualisation)',{className:'center-free-tip'});
-          styleParticipants({lat:participants[0].lat,lng:participants[0].lng}, R);
-          hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=0.00 km · d_max=0.00 km. Ajoutez des consommateurs pour affiner.`, 'ok');
-          updatePoiInRange({lat:participants[0].lat,lng:participants[0].lng}, R);
-          return;
-        }
+        clearVizCircle();
+        if(!participants.length){ tSet(statusEl,'Ajoutez un producteur et des consommateurs.'); poiInRangeEl.textContent='0'; return; }
+        if(!participants.some(p=>p.type==='producer')){ tSet(statusEl,'Aucun producteur détecté.'); poiInRangeEl.textContent='0'; return; }
 
         const mec = minimalEnclosingCircle(participants.map(p=>({lat:p.lat,lng:p.lng})));
         if(!mec){ tSet(statusEl,'Centre libre non calculable.'); poiInRangeEl.textContent='0'; return; }
-
-        // d_max & couple limitant
-        const pts = participants.map(p=>({lat:p.lat,lng:p.lng}));
-        const pair = farthestPair(pts);
-        let pairNames='—';
-        if(pair){
-          const a=participants[pair.i], b=participants[pair.j];
-          pairNames = `${esc(a.name||a.type)} ↔ ${esc(b.name||b.type)}`;
-          farPairLine = L.polyline([[a.lat,a.lng],[b.lat,b.lng]], {color:'#111827', weight:2, opacity:0.65, dashArray:'4 6'}).addTo(map);
-        }
-
         const pass = mec.r <= R + eps;
 
         vizCircle = L.circle([mec.center.lat,mec.center.lng],{ radius:R*1000,color:'#6D28D9',weight:2,fill:false,opacity:0.9,dashArray:'6 6' })
@@ -422,15 +571,13 @@
         }
 
         const outside = participants.filter(p=> haversineKm(mec.center,{lat:p.lat,lng:p.lng}) > R + eps).map(p=> p.name||p.type);
-        const dmaxText = pair ? pair.dmax.toFixed(2) : '0.00';
-
         if(pass){
-          hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · R=${esc(R.toFixed(2))} km · r*=${esc(mec.r.toFixed(2))} km · d_max=${esc(dmaxText)} km · Couple limitant : ${pairNames}.`, 'ok');
+          hSet(statusEl, `<strong>Conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km ≤ D/2=${esc(R.toFixed(2))} km.`, 'ok');
         }else{
-          hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · R=${esc(R.toFixed(2))} km · r*=${esc(mec.r.toFixed(2))} km > R · d_max=${esc(dmaxText)} km · Limitants : ${outside.map(esc).join(', ')||'—'}.`, 'ko');
+          hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko');
         }
 
-        updatePoiInRange(mec.center, R);
+        updatePoiInRange(mec.center, R); // info uniquement
       }
 
       function updatePoiInRange(center=null, R=null){
@@ -456,9 +603,33 @@
       // UI top bar
       document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display=(v==='custom')?'inline-block':'none'; refreshACC(); });
       document.getElementById('customKm').addEventListener('input', refreshACC);
-      document.getElementById('sisToggle').addEventListener('change', ()=>{ /* info pour l’instant */ refreshACC(); });
-      document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> removeParticipant(p.id)); };
+      document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> deleteEntry(p,'participant')); };
       document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
+
+      // Raccourcis clavier (Suppr / Ctrl-Z / Esc)
+      window.addEventListener('keydown', (e)=>{
+        const tag=(e.target && e.target.tagName || '').toUpperCase();
+        const typing = tag==='INPUT'||tag==='TEXTAREA'||(e.target&&e.target.isContentEditable);
+        if(typing) return;
+
+        if((e.key==='Delete' || e.key==='Backspace') && selectedEntry){
+          e.preventDefault();
+          deleteEntry(selectedEntry.ref, selectedEntry.type);
+        }
+        if( (e.ctrlKey || e.metaKey) && (e.key.toLowerCase()==='z') ){
+          e.preventDefault(); undoLast();
+        }
+        if(e.key==='Escape'){ clearSelection(); }
+      });
+
+      // Drag & drop .json sur la carte
+      mapEl.addEventListener('dragover', e=>{ e.preventDefault(); });
+      mapEl.addEventListener('drop', async e=>{
+        e.preventDefault();
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if(!f || !/\.json$/i.test(f.name)) return;
+        try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé (drag & drop).'); }catch(_){ tSet(statusEl,'Fichier invalide.'); }
+      });
 
       // Localisation
       let myMarker=null, myAccCircle=null;
@@ -481,18 +652,18 @@
       document.getElementById('gearBtn').onclick = ()=>{ refreshProjectList(); drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); };
       document.getElementById('drawerClose').onclick = ()=>{ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); };
 
-      // Projets (participants + réglages)
+      // Projets (participants seulement)
       function captureState(){ return {
         name: (document.getElementById('projName').value||'Projet 1').trim()||'Projet 1',
-        settings: { diameterSel: document.getElementById('limitSel').value, customKm: document.getElementById('customKm').value, sis: !!document.getElementById('sisToggle').checked },
+        settings: { diameterSel: document.getElementById('limitSel').value, customKm: document.getElementById('customKm').value },
         participants: participants.map(p=>({name:p.name, lat:p.lat, lng:p.lng, type:p.type}))
       }; }
       function applyState(st){
-        participants.slice().forEach(p=> removeParticipant(p.id));
+        // vider
+        participants.slice().forEach(p=> deleteEntry(p,'participant'));
         document.getElementById('projName').value = st.name || 'Projet';
         document.getElementById('limitSel').value = st.settings?.diameterSel || '20';
         document.getElementById('customKm').value = st.settings?.customKm || '';
-        document.getElementById('sisToggle').checked = !!st.settings?.sis;
         document.getElementById('customKm').style.display = (document.getElementById('limitSel').value==='custom')?'inline-block':'none';
         (st.participants||[]).forEach(p=> addParticipant(p.lat, p.lng, p.type, p.name));
         refreshACC(true);
@@ -506,7 +677,7 @@
       document.getElementById('exportJson').onclick = ()=>{ const st=captureState(); const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(st.name||'projet_acc')+'.json'; a.click(); URL.revokeObjectURL(url); };
       document.getElementById('importJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const txt=await f.text(); const st=JSON.parse(txt); applyState(st); tSet(statusEl,'Projet importé.'); }catch(_){ tSet(statusEl,'Fichier invalide.'); } });
 
-      // Impression
+      // Impression fiable
       function updatePrintHeader(){
         const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
         const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
@@ -536,9 +707,10 @@
       document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
       document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); addParticipant(parseFloat(a.dataset.lat), parseFloat(a.dataset.lng), selectedType(), a.dataset.label); map.setView([parseFloat(a.dataset.lat), parseFloat(a.dataset.lng)], 15); });
 
-      // POI Isère (Overpass)
+      // POI Isère (Overpass) — SDIS/SDMIS/STIS/SLIS (et autres casernes)
       async function loadPoiIsere(){
-        const query = `[out:json][timeout:60];
+        const queries = [
+`[out:json][timeout:60];
 (
   rel["admin_level"="6"]["ref:INSEE"="38"];
   rel["admin_level"="6"]["name"="Isère"];
@@ -548,32 +720,58 @@
   node["amenity"="fire_station"](area.a);
   way["amenity"="fire_station"](area.a);
   relation["amenity"="fire_station"](area.a);
-); out center tags;`;
+); out center tags;`,
+`[out:json][timeout:60];
+(
+  node["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  way["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+  relation["amenity"="fire_station"](45.00,5.10,45.80,6.45);
+); out center tags;`
+        ];
         const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
         const btn=document.getElementById('loadPoiIsere'); const prev=btn.textContent; btn.disabled=true; btn.textContent='Chargement…';
-        function kindFromTags(tags){ const t=(s)=>String(s||'').toUpperCase(); const name=t(tags.name), op=t(tags.operator); if(/SDMIS/.test(name)||/SDMIS/.test(op)) return 'SDMIS'; if(/STIS/.test(name)||/STIS/.test(op)) return 'STIS'; if(/SLIS/.test(name)||/SLIS/.test(op)) return 'SLIS'; if(/SDIS/.test(name)||/SDIS/.test(op)) return 'SDIS'; return 'Caserne'; }
-        try{
-          let ok=false;
-          for(const ep of endpoints){
-            try{
-              const r=await fetch(ep+'?data='+encodeURIComponent(query),{headers:{'Accept':'application/json'}});
-              if(!r.ok) throw new Error('HTTP '+r.status);
-              const j=await r.json(); const els=Array.isArray(j.elements)?j.elements:[];
-              let count=0; const seen=new Set();
-              for(const el of els){
-                let lat=null,lng=null;
-                if(el.type==='node'){ lat=el.lat; lng=el.lon; }
-                else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
-                if(lat==null || lng==null) continue;
-                const tags=el.tags||{}; const label=tags.name || tags['addr:place'] || tags['addr:city'] || 'Caserne';
-                const key=`${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
-                if(seen.has(key)) continue; seen.add(key);
-                addPOI(lat,lng, kindFromTags(tags), label); count++;
-              }
-              if(count>0){ ok=true; break; }
-            }catch(e){ /* try next endpoint */ }
+
+        function kindFromTags(tags){
+          const t=(s)=>String(s||'').toUpperCase();
+          const name=t(tags.name), op=t(tags.operator);
+          if(/SDMIS/.test(name)||/SDMIS/.test(op)) return 'SDMIS';
+          if(/STIS/.test(name)||/STIS/.test(op)) return 'STIS';
+          if(/SLIS/.test(name)||/SLIS/.test(op)) return 'SLIS';
+          if(/SDIS/.test(name)||/SDIS/.test(op)) return 'SDIS';
+          return 'Caserne';
+        }
+        function parseAndAdd(j){
+          const els=Array.isArray(j.elements)?j.elements:[];
+          let ok=0; const seen=new Set();
+          for(const el of els){
+            let lat=null,lng=null;
+            if(el.type==='node'){ lat=el.lat; lng=el.lon; }
+            else if(el.center){ lat=el.center.lat; lng=el.center.lon; }
+            if(lat==null || lng==null) continue;
+            const tags=el.tags||{}; const label=tags.name || tags['addr:place'] || tags['addr:city'] || 'Caserne';
+            const key=`${(label||'').toLowerCase()}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+            if(seen.has(key)) continue; seen.add(key);
+            addPOI(lat,lng, kindFromTags(tags), label); ok++;
           }
-          tSet(statusEl, ok ? 'POI Isère chargés.' : 'Aucun POI trouvé (service indisponible ?)');
+          return ok;
+        }
+
+        let success=false;
+        try{
+          for(const q of queries){
+            if(success) break;
+            for(const ep of endpoints){
+              try{
+                const r=await fetch(ep+'?data='+encodeURIComponent(q),{headers:{'Accept':'application/json'}});
+                if(!r.ok) throw new Error('HTTP '+r.status);
+                const j=await r.json();
+                const k=parseAndAdd(j);
+                if(k>0){ success=true; break; }
+              }catch(e){ /* essayer endpoint suivant */ }
+            }
+          }
+          if(success){ tSet(statusEl, 'POI Isère chargés.'); }
+          else{ tSet(statusEl, 'Aucun POI trouvé (aire/bbox). Vérifie le réseau.'); }
         }finally{
           btn.disabled=false; btn.textContent=prev;
         }
@@ -590,8 +788,7 @@
         return null;
       }
       async function initDefaultProducer(){
-        try{
-          const saved=localStorage.getItem('defaultProducer');
+        try{ const saved=localStorage.getItem('defaultProducer');
           if(saved){ const o=JSON.parse(saved); if(o && o.lat && o.lng){ addParticipant(o.lat,o.lng,'producer', o.name||'Producteur'); if(!document.getElementById('projName').value) document.getElementById('projName').value='Projet 1'; tSet(statusEl,'Producteur par défaut chargé.'); return; }
         }}catch(_){ }
         const g=await geocodeDefault(DEFAULT_ADDR);
@@ -613,24 +810,8 @@
         tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`);
       };
 
-      // Impression prête
-      function updatePrintHeader(){
-        const name=(document.getElementById('projName').value||'Projet 1').trim()||'Projet 1';
-        const D=currentDiameter(); const n=participants.length, np=participants.filter(p=>p.type==='producer').length, nc=participants.filter(p=>p.type==='consumer').length;
-        document.getElementById('printMeta').textContent = `${name} — D=${D} km — Points: ${n} (Prod ${np}, Cons ${nc}) — ${fmtDate(new Date())}`;
-      }
-      async function ensureTilesReady(timeout=2000){
-        return new Promise(resolve=>{
-          const start=Date.now(); const tiles=[...document.querySelectorAll('.leaflet-tile')];
-          if(tiles.length===0){ resolve(); return; }
-          let remaining=tiles.length; const done=()=>{ if(--remaining<=0 || (Date.now()-start)>timeout) resolve(); };
-          tiles.forEach(img=>{ if(img.complete && img.naturalWidth>0){ done(); } else { img.addEventListener('load',done,{once:true}); img.addEventListener('error',done,{once:true}); } });
-          setTimeout(resolve, timeout);
-        });
-      }
-      document.getElementById('printBtn').onclick = async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(2000); window.print(); };
-      window.addEventListener('beforeprint', async ()=>{ updatePrintHeader(); try{ map.invalidateSize(); }catch(_){ } await ensureTilesReady(1500); });
-      window.addEventListener('afterprint', ()=>{ setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } }, 100); });
+      // Impression fiable
+      function updatePrintHeaderAndPrint(){ /* déjà défini plus haut */ }
 
       // Lancer
       try{ initDefaultProducer(); }catch(_){ }
