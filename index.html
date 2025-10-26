@@ -40,7 +40,7 @@
     #map{min-height:420px;margin:8px;border:1px solid var(--line);border-radius:12px;position:relative}
 
     /* Drawer */
-    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:380px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
+    #drawer{position:fixed;inset:auto 0 0 auto;top:0;height:100vh;width:420px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);transform:translateX(100%);transition:.25s ease;z-index:5000;display:flex;flex-direction:column}
     #drawer.open{transform:none}
     #drawer header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
     #drawer h2{font-family:'Montserrat',sans-serif;font-size:16px;margin:0}
@@ -60,9 +60,6 @@
       background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;
       padding:4px 8px;font-size:12px;z-index:1000
     }
-
-    /* Centre libre (tooltip) */
-    .center-free-tip{background:#111827;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 
     /* Sélection & Snackbar */
     .marker-selected { outline:3px solid rgba(55,195,175,.85); outline-offset:2px; }
@@ -215,6 +212,22 @@
         <div style="margin-top:6px"><button id="resetDefaultBtn" class="btn secondary">Réinitialiser le défaut</button></div>
       </fieldset>
 
+      <fieldset>
+        <legend>Exports</legend>
+        <div class="row">
+          <button id="exportCsvParticipants" class="btn">Exporter CSV participants</button>
+          <button id="exportCsvPoi" class="btn">Exporter CSV POI</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="exportGeojsonParticipants" class="btn secondary">Exporter GeoJSON participants</button>
+          <button id="exportGeojsonPoi" class="btn secondary">Exporter GeoJSON POI</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="exportGeojsonPerimeter" class="btn secondary">Exporter GeoJSON périmètre (D/2)</button>
+          <span class="small" id="perimInfo">—</span>
+        </div>
+      </fieldset>
+
       <div class="small" style="margin-top:10px">Participants : <span id="count">Aucun point.</span></div>
     </div>
   </aside>
@@ -239,6 +252,7 @@
       const statusEl = document.getElementById('status');
       const poiStatsEl = document.getElementById('poiStats');
       const poiInRangeEl = document.getElementById('poiInRange');
+      const perimInfoEl = document.getElementById('perimInfo');
       const mapEl = document.getElementById('map');
 
       // Utils
@@ -317,11 +331,10 @@
       const poiLayer = L.layerGroup().addTo(map);
 
       // ===== Sélection / Undo (UX) =====
-      let selectedEntry = null; // {id, type:'participant'|'poi', ref:entry}
-      const historyStack = [];  // pile pour undo
+      let selectedEntry = null;
+      const historyStack = [];
 
       function selectEntry(entry, layerType){
-        // désélection précédente
         if (selectedEntry && selectedEntry.ref && selectedEntry.ref.marker){
           try{
             selectedEntry.ref.marker._path && selectedEntry.ref.marker._path.classList.remove('marker-selected');
@@ -345,9 +358,7 @@
       }
       function attachLongPress(layer, action, delay=600){
         let timer=null;
-        layer.on('mousedown touchstart', ()=>{
-          timer = setTimeout(()=>{ timer=null; action(); }, delay);
-        });
+        layer.on('mousedown touchstart', ()=>{ timer = setTimeout(()=>{ timer=null; action(); }, delay); });
         function cancel(){ if(timer){ clearTimeout(timer); timer=null; } }
         layer.on('mouseup mouseleave touchend dragstart move', cancel);
       }
@@ -355,12 +366,7 @@
         const el = document.getElementById('snackbar');
         const btn = document.getElementById('undoBtn');
         let hideTimer = null;
-        btn.onclick = ()=>{
-          try{ cb && cb(); }finally{
-            el.classList.remove('show');
-            if(hideTimer) clearTimeout(hideTimer);
-          }
-        };
+        btn.onclick = ()=>{ try{ cb && cb(); }finally{ el.classList.remove('show'); if(hideTimer) clearTimeout(hideTimer); } };
         el.classList.add('show');
         if(hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(()=> el.classList.remove('show'), 6000);
@@ -394,14 +400,12 @@
           const { entry, layerType } = last.payload;
           if(layerType==='participant'){
             const m=L.circleMarker([entry.lat,entry.lng],{radius:7,color:colors[entry.type],weight:2,fillColor:colors[entry.type],fillOpacity:0.3}).addTo(participantLayer);
-            entry.marker = m;
-            bindParticipantUI(entry);
+            entry.marker = m; bindParticipantUI(entry);
             participants.push(entry);
             updateCount(); refreshACC();
           }else{
             const m=L.circleMarker([entry.lat,entry.lng],{radius:6,color:colors.poi,weight:2,fillColor:colors.poi,fillOpacity:0.25}).addTo(poiLayer);
-            entry.marker = m;
-            bindPoiUI(entry);
+            entry.marker = m; bindPoiUI(entry);
             pois.push(entry);
             setPoiStats(); updatePoiInRange();
           }
@@ -468,19 +472,9 @@
           });
         });
 
-        // Sélection + long-press
         m.on('click', ()=> selectEntry(entry,'participant'));
-        attachLongPress(m, ()=> {
-          if(confirm(`Supprimer « ${entry.name} » ?`)){
-            deleteEntry(entry,'participant');
-          }
-        });
-        // clic-droit (desktop) = suppression directe avec confirmation
-        m.on('contextmenu', ()=>{
-          if(confirm(`Supprimer « ${entry.name} » ?`)){
-            deleteEntry(entry,'participant');
-          }
-        });
+        attachLongPress(m, ()=> { if(confirm(`Supprimer « ${entry.name} » ?`)){ deleteEntry(entry,'participant'); } });
+        m.on('contextmenu', ()=>{ if(confirm(`Supprimer « ${entry.name} » ?`)){ deleteEntry(entry,'participant'); } });
       }
 
       // ==== POI (ajout + UI bind) ====
@@ -520,32 +514,26 @@
         });
 
         m.on('click', ()=> selectEntry(entry,'poi'));
-        attachLongPress(m, ()=> {
-          if(confirm(`Supprimer « ${entry.name} » ?`)){
-            deleteEntry(entry,'poi');
-          }
-        });
-        m.on('contextmenu', ()=>{
-          if(confirm(`Supprimer « ${entry.name} » ?`)){
-            deleteEntry(entry,'poi');
-          }
-        });
+        attachLongPress(m, ()=> { if(confirm(`Supprimer « ${entry.name} » ?`)){ deleteEntry(entry,'poi'); } });
+        m.on('contextmenu', ()=>{ if(confirm(`Supprimer « ${entry.name} » ?`)){ deleteEntry(entry,'poi'); } });
       }
 
       // Ajout de participants par clic carte
       map.on('click', e=> addParticipant(e.latlng.lat, e.latlng.lng, selectedType()));
 
       // ACC core (ne dépend que des participants)
-      function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } }
+      function clearVizCircle(){ if(vizCircle){ map.removeLayer(vizCircle); vizCircle=null; } perimInfoEl.textContent = vizCircle ? '' : '—'; }
       function styleParticipants(center, R){
-        participants.forEach(p=>{
-          const d = haversineKm(center,{lat:p.lat,lng:p.lng});
-          const inside = d <= R + eps;
-          p.marker.setStyle({
-            color: inside ? colors[p.type] : '#8b8b8b',
-            weight: inside ? 3 : 2,
-            fillColor: colors[p.type],
-            fillOpacity: inside ? 0.5 : 0.15
+        requestAnimationFrame(()=>{
+          participants.forEach(p=>{
+            const d = haversineKm(center,{lat:p.lat,lng:p.lng});
+            const inside = d <= R + eps;
+            p.marker.setStyle({
+              color: inside ? colors[p.type] : '#8b8b8b',
+              weight: inside ? 3 : 2,
+              fillColor: colors[p.type],
+              fillOpacity: inside ? 0.5 : 0.15
+            });
           });
         });
       }
@@ -577,7 +565,8 @@
           hSet(statusEl, `<strong>Non conforme</strong> — D=${esc(String(D))} km · r*=${esc(mec.r.toFixed(2))} km > D/2=${esc(R.toFixed(2))} km · Points limitants : ${outside.map(esc).join(', ')||'—'}`, 'ko');
         }
 
-        updatePoiInRange(mec.center, R); // info uniquement
+        perimInfoEl.textContent = `centre: ${mec.center.lat.toFixed(5)}, ${mec.center.lng.toFixed(5)} · R=${R.toFixed(2)} km`;
+        updatePoiInRange(mec.center, R);
       }
 
       function updatePoiInRange(center=null, R=null){
@@ -586,27 +575,30 @@
           center = vizCircle.getLatLng(); R = (vizCircle.getRadius()||0)/1000;
         }
         let cnt=0;
-        pois.forEach(p=>{
-          const inside = haversineKm(center,{lat:p.lat,lng:p.lng}) <= R + eps;
-          if(inside) cnt++;
-          p.marker.setStyle({
-            color: inside ? colors.poi : '#8b8b8b',
-            weight: inside ? 4 : 2,
-            fillColor: colors.poi,
-            fillOpacity: inside ? 0.55 : 0.15
+        requestAnimationFrame(()=>{
+          pois.forEach(p=>{
+            const inside = haversineKm(center,{lat:p.lat,lng:p.lng}) <= R + eps;
+            if(inside) cnt++;
+            p.marker.setStyle({
+              color: inside ? colors.poi : '#8b8b8b',
+              weight: inside ? 4 : 2,
+              fillColor: colors.poi,
+              fillOpacity: inside ? 0.55 : 0.15
+            });
+            p.marker.bindTooltip(`${safeText(p.name)} — ${inside ? 'dans D/2' : 'hors D/2'}`);
           });
-          p.marker.bindTooltip(`${safeText(p.name)} — ${inside ? 'dans D/2' : 'hors D/2'}`);
+          poiInRangeEl.textContent = String(cnt);
         });
-        poiInRangeEl.textContent = String(cnt);
       }
 
       // UI top bar
       document.getElementById('limitSel').addEventListener('change', (e)=>{ const v=e.target.value; const custom=document.getElementById('customKm'); custom.style.display=(v==='custom')?'inline-block':'none'; refreshACC(); });
       document.getElementById('customKm').addEventListener('input', refreshACC);
       document.getElementById('clearBtn').onclick = ()=>{ participants.slice().forEach(p=> deleteEntry(p,'participant')); };
+
       document.getElementById('fitBtn').onclick = ()=>{ if(!participants.length) return; const g=L.featureGroup(participants.map(p=>p.marker)); map.fitBounds(g.getBounds().pad(0.25)); };
 
-      // Raccourcis clavier (Suppr / Ctrl-Z / Esc)
+      // Raccourcis clavier
       window.addEventListener('keydown', (e)=>{
         const tag=(e.target && e.target.tagName || '').toUpperCase();
         const typing = tag==='INPUT'||tag==='TEXTAREA'||(e.target&&e.target.isContentEditable);
@@ -659,7 +651,6 @@
         participants: participants.map(p=>({name:p.name, lat:p.lat, lng:p.lng, type:p.type}))
       }; }
       function applyState(st){
-        // vider
         participants.slice().forEach(p=> deleteEntry(p,'participant'));
         document.getElementById('projName').value = st.name || 'Projet';
         document.getElementById('limitSel').value = st.settings?.diameterSel || '20';
@@ -707,8 +698,110 @@
       document.getElementById('searchQ').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const q=(e.target.value||'').trim(); if(q) searchAddress(q); } });
       document.getElementById('searchResults').addEventListener('click', e=>{ const a=e.target.closest('a[data-lat]'); if(!a) return; e.preventDefault(); addParticipant(parseFloat(a.dataset.lat), parseFloat(a.dataset.lng), selectedType(), a.dataset.label); map.setView([parseFloat(a.dataset.lat), parseFloat(a.dataset.lng)], 15); });
 
-      // POI Isère (Overpass) — SDIS/SDMIS/STIS/SLIS (et autres casernes)
+      // ======= EXPORTS =======
+      function download(filename, blob){
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      }
+      function exportCsvParticipants(){
+        const rows = [['name','type','lat','lng']];
+        participants.forEach(p=> rows.push([p.name||'', p.type, p.lat, p.lng]));
+        const csv = rows.map(r => r.map(v=>{
+          const s=String(v==null?'':v).replace(/"/g,'""');
+          return /[;"\n]/.test(s) ? `"${s}"` : s;
+        }).join(';')).join('\n');
+        download('participants.csv', new Blob([csv],{type:'text/csv;charset=utf-8'}));
+      }
+      function exportCsvPoi(){
+        const rows = [['name','kind','lat','lng','in_D_over_2']];
+        let center=null, R=null;
+        if(vizCircle){ center = vizCircle.getLatLng(); R = (vizCircle.getRadius()||0)/1000; }
+        pois.forEach(p=>{
+          const inside = center? (haversineKm(center,{lat:p.lat,lng:p.lng}) <= R + 1e-9) : '';
+          rows.push([p.name||'', p.kind||'', p.lat, p.lng, inside]);
+        });
+        const csv = rows.map(r => r.map(v=>{
+          const s=String(v==null?'':v).replace(/"/g,'""');
+          return /[;"\n]/.test(s) ? `"${s}"` : s;
+        }).join(';')).join('\n');
+        download('poi_incendie.csv', new Blob([csv],{type:'text/csv;charset=utf-8'}));
+      }
+      function exportGeojsonParticipants(){
+        const gj = {
+          type:"FeatureCollection",
+          features: participants.map(p=>({
+            type:"Feature",
+            properties:{ name:p.name||'', type:p.type },
+            geometry:{ type:"Point", coordinates:[p.lng, p.lat] }
+          }))
+        };
+        download('participants.geojson', new Blob([JSON.stringify(gj,null,2)],{type:'application/geo+json'}));
+      }
+      function exportGeojsonPoi(){
+        const gj = {
+          type:"FeatureCollection",
+          features: pois.map(p=>({
+            type:"Feature",
+            properties:{ name:p.name||'', kind:p.kind||'fire_station' },
+            geometry:{ type:"Point", coordinates:[p.lng, p.lat] }
+          }))
+        };
+        download('poi_incendie.geojson', new Blob([JSON.stringify(gj,null,2)],{type:'application/geo+json'}));
+      }
+      function circleToGeoJSON(center, radiusMeters, steps=128){
+        const coords=[];
+        const R = 6371000;
+        for(let i=0;i<=steps;i++){
+          const brng = 2*Math.PI * (i/steps);
+          const lat1 = center.lat * Math.PI/180;
+          const lon1 = center.lng * Math.PI/180;
+          const lat2 = Math.asin(Math.sin(lat1)*Math.cos(radiusMeters/R) + Math.cos(lat1)*Math.sin(radiusMeters/R)*Math.cos(brng));
+          const lon2 = lon1 + Math.atan2(Math.sin(brng)*Math.sin(radiusMeters/R)*Math.cos(lat1), Math.cos(radiusMeters/R)-Math.sin(lat1)*Math.sin(lat2));
+          coords.push([ lon2*180/Math.PI, lat2*180/Math.PI ]);
+        }
+        return {
+          type:"FeatureCollection",
+          features:[
+            {
+              type:"Feature",
+              properties:{ name:"ACC périmètre D/2", radius_m: radiusMeters },
+              geometry:{ type:"Polygon", coordinates:[coords] }
+            }
+          ]
+        };
+      }
+      function exportGeojsonPerimeter(){
+        if(!vizCircle){
+          alert("Périmètre indisponible : ajoute d'abord au moins un producteur + consommateurs pour calculer le centre libre.");
+          return;
+        }
+        const center = vizCircle.getLatLng();
+        const radius_m = vizCircle.getRadius(); // D/2 en mètres
+        const gj = circleToGeoJSON(center, radius_m, 128);
+        download('perimetre_acc.geojson', new Blob([JSON.stringify(gj,null,2)],{type:'application/geo+json'}));
+      }
+      document.getElementById('exportCsvParticipants').addEventListener('click', exportCsvParticipants);
+      document.getElementById('exportCsvPoi').addEventListener('click', exportCsvPoi);
+      document.getElementById('exportGeojsonParticipants').addEventListener('click', exportGeojsonParticipants);
+      document.getElementById('exportGeojsonPoi').addEventListener('click', exportGeojsonPoi);
+      document.getElementById('exportGeojsonPerimeter').addEventListener('click', exportGeojsonPerimeter);
+
+      // ===== POI Isère (Overpass) — clear avant chargement + verrou =====
+      let loadingPoi = false;
+      function clearAllPoi(){
+        poiLayer.clearLayers();
+        pois.length = 0;
+        setPoiStats();
+        poiInRangeEl.textContent='0';
+      }
       async function loadPoiIsere(){
+        if(loadingPoi) return;
+        loadingPoi = true;
+
+        // éviter les doublons : on vide d'abord
+        clearAllPoi();
+
         const queries = [
 `[out:json][timeout:60];
 (
@@ -774,6 +867,7 @@
           else{ tSet(statusEl, 'Aucun POI trouvé (aire/bbox). Vérifie le réseau.'); }
         }finally{
           btn.disabled=false; btn.textContent=prev;
+          loadingPoi = false;
         }
       }
       document.getElementById('loadPoiIsere').addEventListener('click', loadPoiIsere);
@@ -809,9 +903,6 @@
         });
         tSet(statusEl,`Import participants : ${ok} ajouté(s), ${ko} rejeté(s).`);
       };
-
-      // Impression fiable
-      function updatePrintHeaderAndPrint(){ /* déjà défini plus haut */ }
 
       // Lancer
       try{ initDefaultProducer(); }catch(_){ }
